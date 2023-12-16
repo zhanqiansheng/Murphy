@@ -24,7 +24,7 @@ export default defineConfig({
   server: {
     proxy: {
         '/api': {
-          target: 'http://region-46.seetacloud.com:13597',
+          target: 'http://region-46.seetacloud.com:27585',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, '/Chat'),
       },

@@ -1,6 +1,7 @@
 <script setup>
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import axios from 'axios'
+// import ElMessage, {ElMessageBox, ElementPlus} from "element-plus";
 const messageInput = ref('')
 const message = ref('')
 const rowsNum = ref(3)
@@ -9,8 +10,17 @@ const talkAllMessage = ref([])
 const history = ref([])
 let lastChild = ref()
 let talkBody = ref()
+let buttonText = ref('发送')
 // 用户是否可输入
 let controlable = ref(true)
+const modelValue = ref('1.0')
+const modelOptions = ref([{
+  value: '1.0',
+  label: 'Murphy-1.0'
+},{
+  value: '2.0',
+  label: 'Murphy-2.0'
+}])
 
 // 过滤器，过滤用户携带的<>括号
 function escapeHtml(value) {
@@ -24,9 +34,10 @@ const sendMessage = async () => {
     return
   }
   controlable.value = false
+  buttonText.value = ''
   let str =
       '<div class="human">' +
-      '  <div class="talk_box right" v-pre>' + message.value + '</div>' +
+      '  <div class="talk_box right">' + message.value + '</div>' +
       '  <div><div class="head_pic human_pic"></div></div>' +
       '</div>'
   talkAllMessage.value.push(str)
@@ -34,9 +45,10 @@ const sendMessage = async () => {
   setTimeout(() => {
     scrollToBottom()
     const foot_input = document.querySelector('.foot_input')
-    foot_input.style.height = 25 + 'px'
     // 清空输入框
     messageInput.value = ''
+    foot_input.value = ''
+    foot_input.style.height = 25 + 'px'
   }, 10)
   // AI回复样式框架
   str = '<div class="machine">' +
@@ -61,21 +73,22 @@ const sendMessage = async () => {
     scrollToBottom()
     const children = talkBody.value.children;
     lastChild = children[children.length - 1];
-    const response = axios.post('/api', data );
-    // 询问成功
-    response.then((result) => {
-      answer.value = result.data.response
-      history.value.push(result.data.history[result.data.history.length-2])
-      history.value.push(result.data.history[result.data.history.length-1])
-      localStorage.setItem('talkHistory', JSON.stringify(history.value))
-      // AI开始回答，清空省略号，逐字打印
-      lastChild.querySelector('.talk_box').textContent = ''
-      printText(0);
-    })
-    // 询问失败
-    .catch((error) => {
-      console.error("服务错误:", error);
-    });
+    connect()
+    // const response = axios.post('/api', data );
+    // // 询问成功
+    // response.then((result) => {
+    //   answer.value = result.data.response
+    //   history.value.push(result.data.history[result.data.history.length-2])
+    //   history.value.push(result.data.history[result.data.history.length-1])
+    //   localStorage.setItem('talkHistory', JSON.stringify(history.value))
+    //   // AI开始回答，清空省略号，逐字打印
+    //   lastChild.querySelector('.talk_box').textContent = ''
+    //   printText(0);
+    // })
+    // // 询问失败
+    // .catch((error) => {
+    //   console.error("服务错误:", error);
+    // });
   }, 550)
 }
 
@@ -98,13 +111,31 @@ function printText(index) {
     }, 1);
   } else {
     controlable.value = true
+    buttonText.value = '发送'
   }
+}
+
+// 清除历史
+const clearHistory = () => {
+  ElMessageBox.confirm('是否清空会话历史?当前窗口的数据记录将会丢失!', '警告', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+  .then(() => {
+    history.value.splice(1, history.value.length - 1)
+    localStorage.setItem('talkHistory', JSON.stringify(history.value))
+    ElMessage.success('已清空')
+  })
+  .catch(() => {
+
+  })
 }
 
 // 监听输入内容变化
 watch(messageInput, () => {
   adjustHeight();
-});
+})
 // 控制输入框高度
 const adjustHeight = () => {
   const foot_input = document.querySelector('.foot_input')
@@ -133,16 +164,36 @@ document.addEventListener('keydown', function(event) {
     event.preventDefault();
     sendMessage()
   }
-  if (event.key === 'z') {
-    console.log(controlable.value)
-  }
-});
+})
+
+const connect = () => {
+  console.log('连接开启')
+  // 双向通信
+  const socket = new WebSocket('ws://localhost:3001');
+  lastChild.querySelector('.talk_box').textContent = ''
+  socket.addEventListener('message', (event) => {
+    answer.value = JSON.parse(event.data);
+    // console.log(answer.value)
+    // AI开始回答，清空省略号
+    scrollToBottom()
+    // printText(0)
+    const target = lastChild.querySelector('.talk_box')
+    target.textContent = answer.value
+  });
+
+  socket.addEventListener('close', () => {
+    console.log('连接已关闭，请继续输入');
+    controlable.value = true
+    buttonText.value = '发送'
+  });
+}
+
 onMounted( () => {
   let str = '<div class="machine">' +
             '  <div>' +
             '    <div class="head_pic machine_pic"></div>' +
             '  </div>' +
-            '  <div class="talk_box">欢迎来到超思维智能！欢迎来到超思维智能！</div>' +
+            '  <div class="talk_box">欢迎来到超思维智能！</div>' +
             '</div>'
   talkAllMessage.value.push(str)
   talkBody.value = document.querySelector('.talk_body')
@@ -161,10 +212,10 @@ onMounted( () => {
     <div class="head">
       <div style="height: 100%;display: flex">
         <img src="../assets/logo2.png" class="head_icon">
-<!--        <div class="head_title">超思维智能</div>-->
       </div>
       <div class="head_navigation">
         <div class="navigation_button">首页</div>
+        <div class="navigation_button">商城</div>
         <div class="navigation_button">关于</div>
         <div class="navigation_button">联系我们</div>
       </div>
@@ -172,14 +223,25 @@ onMounted( () => {
     <div class="mainbody">
       <div class="mainbody_talk">
         <div class="talk_head">
-          人工智能聊天
+          <el-select v-model="modelValue" placeholder="请选择">
+            <el-option
+                v-for="item in modelOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value">
+            </el-option>
+          </el-select>
+          <div>智能Murphy</div>
+<!--          <el-button @click="clearHistory()">清空会话历史</el-button>-->
+          <button @click="clearHistory()">清空会话历史</button>
         </div>
         <div class="talk_body">
           <div v-for="item in talkAllMessage" :key="item" v-html="item"/>
         </div>
         <div class="talk_foot">
           <textarea v-model="messageInput" placeholder="请输入内容" class="foot_input" />
-          <button class="foot_button" @click="sendMessage()">发送</button>
+          <button @click="sendMessage()" v-if="controlable">发送</button>
+          <el-button style="border: 1px solid black;" @click="sendMessage()" disabled loading v-else/>
         </div>
       </div>
       <div class="mainbody_ad"></div>
@@ -198,17 +260,14 @@ onMounted( () => {
     height: 50px;
     min-width: 1000px;
     /*border: 1px solid black;*/
-    background-color: paleturquoise;
+    /*background-color: paleturquoise;*/
+    background-color: rgba(0, 212, 255, 0.3);
     margin: auto;
     display: flex;
   }
-  .head_title{
-    margin: auto 20px;
-  }
   .head_icon{
     background-size: cover;
-    margin-left: 20px;
-    height: 100%
+    margin: 5px 20px 5px 20px;
   }
   .head_navigation{
     width: 50vw;
@@ -218,23 +277,26 @@ onMounted( () => {
     box-sizing: border-box;
     display: flex;
     justify-content: flex-end;
-    /*border: solid 1px black;*/
   }
   .navigation_button{
     float: right;
-    width: 200px;
+    width: 160px;
     height: 100%;
-    background-color: #ffffff;
     text-align: center;
     line-height: 50px;
-    transition: all 0.2s;
     margin-right: 0;
     box-sizing: border-box;
     cursor: pointer;
+    /*border-left: 1px solid black;*/
+    font-size: 16px;
+    transition: all 0.2s;
   }
   .navigation_button:hover{
-    color: aqua;
-    border-bottom: cornflowerblue solid 5px;
+    color: #007F99;
+    font-size: 18px;
+    -webkit-text-stroke: 1px rgba(15, 178, 145, 1);
+    text-stroke: 1px rgba(15, 178, 145, 0.7);
+    border-bottom: rgba(15, 178, 145, 0.7) solid 5px;
   }
   /* 主体部分 */
   .mainbody{
@@ -253,28 +315,51 @@ onMounted( () => {
     width: 70vw;
     min-width: 700px;
     height: 96%;
-    border: 5px solid powderblue;
-    background-color: paleturquoise;
-    border-radius: 10px;
+    /*border: 5px solid rgba(0, 212, 255, 1);*/
+    border: 7px solid rgba(15, 178, 145, 0.5);
+    /*background-color: paleturquoise;*/
+    border-radius: 3px;
     margin: auto 20px;
     box-sizing: border-box;
     position: relative;
     display: flex;
     flex-direction: column;
-    box-shadow: 5px 5px 13px 0 rgba(0, 0, 0, 0.3);
+    box-shadow: 15px 15px 10px 0 rgba(0, 0, 0, 0.3);
   }
   .talk_head{
-    width: 100%;
-    height: 40px;
-    line-height: 40px;
-    text-align: center;
+    height: 50px;
+    line-height: 50px;
+    display: flex;
+    background-color: rgb(240, 251, 255);
+    position: relative;
+  }
+  .talk_head .el-select{
+    width: 150px;
+    position: absolute;
+    margin: 9px auto auto 15px;
+    border-radius: 5px;
+  }
+  .talk_head div {
+    margin: auto;
+  }
+  .talk_head button {
+    width: 100px;
+    height: 80%;
+    margin: 5px 15px auto auto;
+    position: absolute;
+    right: 0;
+    border: 1px solid gray;
+    color: black;
+    border-radius: 5px;
+    cursor: pointer;
+    background-color: #fff;
   }
   .talk_body{
     width: 100%;
     box-sizing: border-box;
     background-color: #fff;
-    border-top: black 1px solid;
-    border-bottom: black 1px solid;
+    border-top: rgba(15, 178, 145, 0.7) 3px solid;
+    border-bottom: rgba(15, 178, 145, 0.7) 3px solid;
     flex: 1;
     padding: 10px;
     margin-bottom: 0;
@@ -307,7 +392,7 @@ onMounted( () => {
     border: 1px solid black;
     margin: 10px;
     padding: 5px 10px;
-    box-shadow: 5px 5px 13px 0 rgba(0, 0, 0, 0.3);
+    /*box-shadow: 5px 5px 13px 0 rgba(0, 0, 0, 0.3);*/
     line-height: 40px;
     overflow-x: auto;
     scrollbar-width: thin;
@@ -341,6 +426,23 @@ onMounted( () => {
     width: 100%;
     display: flex;
     margin-top: 0;
+    background-color: rgb(240, 251, 255);
+  }
+  .talk_foot button{
+    width: 6vw;
+    min-width: 70px;
+    height: 38px;
+    margin: auto auto 10px auto;
+    color: black;
+    border: 1px solid black;
+    border-radius: 5px;
+    cursor: pointer;
+    background-color: #fff;
+  }
+  .talk_foot button:hover, .talk_head button:hover{
+    color: #3498db;
+    border: 1px solid #3498db;
+    background-color: rgb(236, 245, 255);
   }
   .foot_input{
     padding: 5px 10px 5px 10px;
@@ -358,20 +460,6 @@ onMounted( () => {
     outline: none;
     border: 2px solid #3498db;
   }
-  .foot_button{
-    width: 6vw;
-    min-width: 70px;
-    height: 38px;
-    margin: auto auto 10px auto;
-    border-radius: 5px;
-    border: #ECF5FF solid 1px;
-  }
-  .foot_button:hover{
-    border: #3498db solid 1px;
-    background-color: #ECF5FF;
-    color: #3BA0FF;
-    cursor: pointer;
-  }
   /*广告*/
   .mainbody_ad{
     width: 300px;
@@ -382,5 +470,7 @@ onMounted( () => {
     background-size: cover;
     background-repeat: no-repeat;
     background-position: center;
+    box-shadow: 15px 15px 10px 0 rgba(0, 0, 0, 0.3);
+    cursor: pointer;
   }
 </style>
