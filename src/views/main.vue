@@ -13,6 +13,7 @@ let talkBody = ref()
 let buttonText = ref('发送')
 // 用户是否可输入
 let controlable = ref(true)
+const imgList = ref(['1', '2'])
 const modelValue = ref('1.0')
 const modelOptions = ref([{
   value: '1.0',
@@ -204,100 +205,48 @@ onMounted( () => {
     history.value.push({"role": "system","content": "你是一个智能聊天对话助手，你需要尽可能的回答用户的问题，并与对方亲切的交流。"})
     localStorage.setItem('talkHistory', JSON.stringify(history.value))
   }
+
+  setTimeout(()=>{
+    const ad = document.querySelector('.mainbody_ad')
+    ad.style.transform = "translateY(0)";
+    ad.style.opacity = "1";
+  }, 10)
 })
 </script>
 
 <template>
-  <div class="all">
-    <div class="head">
-      <div style="height: 100%;display: flex">
-        <img src="../assets/logo2.png" class="head_icon">
+  <div class="mainbody">
+    <div class="mainbody_talk">
+      <div class="talk_head">
+        <el-select v-model="modelValue" placeholder="请选择">
+          <el-option
+              v-for="item in modelOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value">
+          </el-option>
+        </el-select>
+        <div>智能Murphy</div>
+        <button @click="clearHistory()">清空会话历史</button>
       </div>
-      <div class="head_navigation">
-        <div class="navigation_button">首页</div>
-        <div class="navigation_button">商城</div>
-        <div class="navigation_button">关于</div>
-        <div class="navigation_button">联系我们</div>
+      <div class="talk_body">
+        <div v-for="item in talkAllMessage" :key="item" v-html="item"/>
+      </div>
+      <div class="talk_foot">
+        <textarea v-model="messageInput" placeholder="请输入内容" class="foot_input" />
+        <button @click="sendMessage()" v-if="controlable">发送</button>
+        <el-button style="border: 1px solid black;" @click="sendMessage()" disabled loading v-else/>
       </div>
     </div>
-    <div class="mainbody">
-      <div class="mainbody_talk">
-        <div class="talk_head">
-          <el-select v-model="modelValue" placeholder="请选择">
-            <el-option
-                v-for="item in modelOptions"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value">
-            </el-option>
-          </el-select>
-          <div>智能Murphy</div>
-<!--          <el-button @click="clearHistory()">清空会话历史</el-button>-->
-          <button @click="clearHistory()">清空会话历史</button>
-        </div>
-        <div class="talk_body">
-          <div v-for="item in talkAllMessage" :key="item" v-html="item"/>
-        </div>
-        <div class="talk_foot">
-          <textarea v-model="messageInput" placeholder="请输入内容" class="foot_input" />
-          <button @click="sendMessage()" v-if="controlable">发送</button>
-          <el-button style="border: 1px solid black;" @click="sendMessage()" disabled loading v-else/>
-        </div>
+    <div class="mainbody_ad">
+      <div class="pointList">
+        <div class="point" v-for="item in imgList.length" :key="item"></div>
       </div>
-      <div class="mainbody_ad"></div>
     </div>
   </div>
 </template>
 
 <style>
-  .all{
-    height: 100vh;
-    position: relative;
-  }
-  /* 头部部分 */
-  .head{
-    width: 100vw;
-    height: 50px;
-    min-width: 1000px;
-    /*border: 1px solid black;*/
-    /*background-color: paleturquoise;*/
-    background-color: rgba(0, 212, 255, 0.3);
-    margin: auto;
-    display: flex;
-  }
-  .head_icon{
-    background-size: cover;
-    margin: 5px 20px 5px 20px;
-  }
-  .head_navigation{
-    width: 50vw;
-    height: 100%;
-    float: right;
-    flex: 1;
-    box-sizing: border-box;
-    display: flex;
-    justify-content: flex-end;
-  }
-  .navigation_button{
-    float: right;
-    width: 160px;
-    height: 100%;
-    text-align: center;
-    line-height: 50px;
-    margin-right: 0;
-    box-sizing: border-box;
-    cursor: pointer;
-    /*border-left: 1px solid black;*/
-    font-size: 16px;
-    transition: all 0.2s;
-  }
-  .navigation_button:hover{
-    color: #007F99;
-    font-size: 18px;
-    -webkit-text-stroke: 1px rgba(15, 178, 145, 1);
-    text-stroke: 1px rgba(15, 178, 145, 0.7);
-    border-bottom: rgba(15, 178, 145, 0.7) solid 5px;
-  }
   /* 主体部分 */
   .mainbody{
     width: 100vw;
@@ -312,14 +261,12 @@ onMounted( () => {
     bottom: 0;
   }
   .mainbody_talk{
-    width: 70vw;
+    width: 60vw;
     min-width: 700px;
     height: 96%;
-    /*border: 5px solid rgba(0, 212, 255, 1);*/
     border: 7px solid rgba(15, 178, 145, 0.5);
-    /*background-color: paleturquoise;*/
     border-radius: 3px;
-    margin: auto 20px;
+    margin: auto 50px;
     box-sizing: border-box;
     position: relative;
     display: flex;
@@ -429,7 +376,7 @@ onMounted( () => {
     background-color: rgb(240, 251, 255);
   }
   .talk_foot button{
-    width: 6vw;
+    width: 4vw;
     min-width: 70px;
     height: 38px;
     margin: auto auto 10px auto;
@@ -446,8 +393,8 @@ onMounted( () => {
   }
   .foot_input{
     padding: 5px 10px 5px 10px;
-    width: 55vw;
-    min-width: 575px;
+    width: 48vw;
+    min-width: 570px;
     resize: none;
     margin: 10px 0 10px 10px;
     border-radius: 5px;
@@ -462,15 +409,34 @@ onMounted( () => {
   }
   /*广告*/
   .mainbody_ad{
-    width: 300px;
+    width: 20vw;
+    min-width: 400px;
     border: 1px solid black;
     margin: 50px auto;
     box-sizing: border-box;
-    background-image: url('../assets/ad.jpg');
+    border-radius: 5px;
+    background-image: url('../assets/ad.png');
     background-size: cover;
     background-repeat: no-repeat;
     background-position: center;
     box-shadow: 15px 15px 10px 0 rgba(0, 0, 0, 0.3);
     cursor: pointer;
+    position: relative;
+
+    transition: all 1s;
+    opacity: 0.5;
+    transform: translateY(50px); /* 初始时从左往右偏移 */
+  }
+  .pointList{
+    position: absolute;
+    width: 100%;
+    height: 50px;
+    background-color: white;
+    bottom: 20px;
+  }
+  .point{
+    width: 10px;
+    height: 10px;
+    background-color: black;
   }
 </style>

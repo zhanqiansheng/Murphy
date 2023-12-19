@@ -15,6 +15,10 @@ body{
   min-width: 1000px;
   /*overflow-y: scroll;*/
   overflow-x: hidden;
-  background-color: rgb(240, 251, 255);
+  /*background-color: rgb(240, 251, 255);*/
+  background-color: #fff;
+}
+.body::-webkit-scrollbar {
+  width:0;
 }
 </style>
