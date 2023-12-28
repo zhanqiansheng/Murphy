@@ -92,14 +92,8 @@ const sendMessage = async () => {
   // 过滤用户携带的<>括号
   message.value = messageInput.value.replace(/</g, '&lt;').replace(/>/g, '&gt;')
   if (messageInput.value.trim() === '' || controlable.value === false) return
-  // 发送前状态重置
-  voiceNum.value = 0
-  sentenceTotal.value = 0
   controlable.value = false
-  if (audio) audio.pause()
-  voiceQueue.clear()
-  msgQueue.clear()
-  sentence.value = ''
+
   // 将用户输入上传到页面
   let str = '<div class="human">'
           + '  <div class="talk_box right">' + message.value + '</div>'
@@ -225,8 +219,6 @@ const connect = () => {
     controlable.value = true
   });
 }
-
-// ---------------------------------------------------- 语音逻辑
 // 队列封装
 function createQueue() {
   const items = [];
@@ -277,33 +269,24 @@ function createQueue() {
     clear
   };
 }
-// 语音播放条数
-const voiceNum = ref(0)
-// 句子总数
-const sentenceTotal = ref(0)
-// 第times次语音请求
+
 const times = ref(1)
-// 待转换队列
 const msgQueue = createQueue()
-// 语音队列
 const voiceQueue = createQueue()
-// 获取一句句子
-const sentence = ref('')
+const sentence = ref('') // 获取一句句子
 // 制作句子队列，等待转语音
 const makeQueue = async(temp) => {
   if (onlyMark(temp.trim())) {  // 若遇到标点符号，分割，赋值句子
     if (sentence.value !== '') {  // 不为空才将句子压入队列，等待进行语音转换
       msgQueue.inqueue(sentence.value)
-      sentenceTotal.value++
       sentence.value = ''
       // 只在前若干次次执行的时候在这里进行请求，请求前几句
       if(times.value > 0) {
+        let temp = msgQueue.front()
+        msgQueue.outqueue()
+        await sendMessageToMicrosoft(temp, 0)
         // 只在第一次时在这里播放，此后都是在音频播放判断结束后进行播放
         times.value--
-        // let temp = msgQueue.front()
-        // msgQueue.outqueue()
-        // await sendMessageToMicrosoft(temp, 0)
-        await sendMessageToMicrosoft(msgQueue.front(), 0)
         if(times.value === 0){
           playAudio()
         }
@@ -313,28 +296,11 @@ const makeQueue = async(temp) => {
     sentence.value += temp
   }
 }
-// 语音文件转文字
-// const fileToText = async (event) => {
-//   event.preventDefault();
-//   const formData = new FormData(document.getElementById('uploadForm'))
-//   const response = await fetch('http://region-3.seetacloud.com:19897/transcribe/', {
-//     method: 'POST',
-//     body: formData
-//   })
-//   const result = await response.json();
-//   document.getElementById('result').textContent = result.text || result.error
-// }
 
-let loopId;
-let loopendId; // 语音播放条数是否匹配
-let audio;
 // 播放语音
 const playAudio = () => {
-  audio = voiceQueue.front()
+  let audio = voiceQueue.front()
   audio.play()
-  document.querySelector('.testText').innerHTML += '音频播放开始<br>'
-  voiceNum.value++
-  console.log('当前语音是第' + voiceNum.value + '条, sentenceTotal的值为' + sentenceTotal.value)
   let flag = 0
 
   // 添加timeupdate事件监听器
@@ -345,15 +311,7 @@ const playAudio = () => {
     if (duration - currentTime < 3) {
       if (flag === 0) {
         flag = 1
-        // 还不能发送，代表第二句还没生成完，执行循环
-        if(msgQueue.size()<=0 && controlable.value === false) {
-          loopId = setInterval(()=>{
-            if(msgQueue.size()>0){
-              sendMessageToMicrosoft(msgQueue.front(), 1)
-              clearInterval(loopId)
-            }
-          }, 1000) // 每1秒执行一次判断
-        } else if(msgQueue.size()>0){
+        if(msgQueue.size()>0){
           sendMessageToMicrosoft(msgQueue.front(), 1)
         }
       }
@@ -362,35 +320,21 @@ const playAudio = () => {
 
   // 在音频播放结束时执行函数
   audio.addEventListener('ended', () => {
-    document.querySelector('.testText').innerHTML += '音频播放结束<br>'
       voiceQueue.outqueue()
       if (!voiceQueue.isEmpty()) {
         // voiceQueue不为空，继续播放
         playAudio()
-      }
-      else if(voiceNum.value !== sentenceTotal.value) {
-        loopendId = setInterval(()=>{
-          if (!voiceQueue.isEmpty()) {
-            // voiceQueue不为空，继续播放
-            playAudio()
-          }
-          if (voiceNum.value === sentenceTotal.value ){
-            clearInterval(loopendId)
-          }
-        }, 1000)
-      }
-      else if (voiceNum.value === sentenceTotal.value ){
-        console.log('所有语音播放完毕')
-        document.querySelector('.testText').innerHTML += '所有语音播放完毕<br>'
+      } else {
+        console.log('语音播放完毕')
         ElMessage.success('播放完毕')
+        // ElMessage.error('播放完毕')
       }
   });
 }
 
 // 向微软发送请求语音合成api请求，将
 const sendMessageToMicrosoft = async(msg, num) => {
-    // if (num===1)
-    msgQueue.outqueue()
+    if (num===1) msgQueue.outqueue()
     const subscriptionKey = '854b68902a2d42f39acb0b8fb789342d';
     const region = 'japaneast';
     const aiName = 'zh-CN-XiaoxiaoNeural'
@@ -419,18 +363,16 @@ const sendMessageToMicrosoft = async(msg, num) => {
         const audio = new Audio();
         audio.src = audioUrl;
         audio.type = 'audio/wav';
+        // 将请求得到的语音放入队列
         // 将获取到的语音压入队列
         voiceQueue.inqueue(audio)
         console.log('---请求音频完成, 请求内容：---\n' +  msg)
-        document.querySelector('.testText').innerHTML += '---请求音频完成, 请求内容：---<br>' + msg + '<br>'
         // msgQueue.outqueue()
       } else {
         console.error('api访问错误:', synthesisResponse.body);
       }
     } else {
       console.log('token访问失败!访问次数过于频繁，请稍后重试')
-      ElMessage.error('语音访问过于频繁，请稍后重试')
-      document.querySelector('.testText').innerHTML += '语音访问过于频繁，请稍后重试'
     }
 }
 // 包含以下标点符号的字符串
@@ -628,26 +570,7 @@ onMounted( () => {
   //   testURL.value = JSON.parse(localStorage.getItem('testURL'))
   // }
   // const myQueue = createQueue();
-  // 语音文件转文字
-  // document.getElementById('uploadForm').addEventListener('submit', async function(event) {
-  //   event.preventDefault();
-  //
-  //   const formData = new FormData(this);
-  //   const response = await fetch('http://region-3.seetacloud.com:19897/transcribe/', {
-  //     method: 'POST',
-  //     body: formData
-  //   });
-  //
-  //   const result = await response.json();
-  //   document.getElementById('result').textContent = result.text || result.error;
-  // })
 })
-const printvoiceNum = () => {
-  console.log('打印语音条数:' + voiceNum.value)
-}
-const printSentenceTotal = () => {
-  console.log('打印当前句子条数:' + sentenceTotal.value)
-}
 </script>
 
 <template>
@@ -671,13 +594,6 @@ const printSentenceTotal = () => {
       <div class="talk_body" @scroll="mousewheel">
         <div v-if="!isBottom" class="to_bottom_button" @click="clickToBottom">↓</div>
         <div v-for="item in talkAllMessage" :key="item" v-html="item"/>
-<!--        <h1>语音转录</h1>-->
-<!--        <form id="uploadForm" enctype="multipart/form-data">-->
-<!--          <input type="file" name="file" accept="audio/*"><br><br>-->
-<!--          <button type="submit">上传并转录</button>-->
-<!--        </form>-->
-<!--        <h2>转录结果：</h2>-->
-<!--        <pre id="result"></pre>-->
       </div>
       <div class="talk_foot">
         <textarea v-model="messageInput" placeholder="请输入内容" class="foot_input" />
@@ -698,10 +614,6 @@ const printSentenceTotal = () => {
         <div class="point" v-for="(item, index) in imgList.length" :key="item"  @click="adChoice(index)"></div>
       </div>
     </div>
-  </div>
-  <div class="testText" style="border: 1px solid black;width: 100vw;height: 300px;overflow: auto;position: absolute;top: 1000px">
-    <button @click="printvoiceNum">打印语音条数</button>
-    <button @click="printSentenceTotal">打印当前句子条数</button>
   </div>
 </template>
 

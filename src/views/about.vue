@@ -12,6 +12,7 @@ onMounted(()=>{
 </script>
 
 <template>
+  <div>关于</div>
   <div class="c1" @click="clickit">1Hello, this is an animated component!</div>
   <div class="c2" @click="clickit">2Hello, this is an animated component!</div>
 </template>

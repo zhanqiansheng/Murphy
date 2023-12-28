@@ -32,8 +32,8 @@ const handleNavigationClick = (event) => {
       <div class="head_navigation" @click="handleNavigationClick">
         <router-link :class="{'navigation_button':1, 'active': isActive('/main')}" to="/main">首页</router-link>
         <router-link :class="{'navigation_button':1, 'active': isActive('/shop')}" to="/shop">商城</router-link>
-        <router-link :class="{'navigation_button':1, 'active': isActive('/about')}" to="/about">关于</router-link>
-        <router-link :class="{'navigation_button':1, 'active': isActive('/bbbb')}" to="/main">联系我们</router-link>
+        <router-link :class="{'navigation_button':1, 'active': isActive('/about')}" to="/about">测试</router-link>
+        <router-link :class="{'navigation_button':1, 'active': isActive('/contact')}" to="/contact">测试</router-link>
       </div>
     </div>
     <router-view/>

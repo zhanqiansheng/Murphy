@@ -18,16 +18,17 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // 'child_process': 'child_process-browser'
     }
   },
-  server: {
-    proxy: {
-        '/api': {
-          target: 'http://region-46.seetacloud.com:27585',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, '/Chat'),
-      },
-    },
-  },
+  // server: {
+  //   proxy: {
+  //       '/stop-processing': {
+  //         target: 'https://region-31.seetacloud.com:20727/stop-processing',
+  //         changeOrigin: true,
+  //         // rewrite: (path) => path.replace(/^\/api/, '/stop-processing'),
+  //     },
+  //   },
+  // },
 })
