@@ -475,6 +475,10 @@ const giveRecordPermission = () => {
 
 // 开始录音
 const recordStart = () => {
+  if(!rec){
+    giveRecordPermission()
+    return
+  }
   if(rec && Recorder.IsOpen()){
     recBlob=null;
     rec.start();
@@ -652,7 +656,7 @@ onMounted( () => {
   // voiceStartButton.value = document.querySelector('.button_voice')
   startTimer()
   // connect()
-  giveRecordPermission()
+  // giveRecordPermission()
 
   const buttonVoice = document.querySelector('.button_voice')
   buttonVoice.addEventListener('mousedown', recordStart)
