@@ -60,7 +60,7 @@
         audio.src = URL.createObjectURL(audioBlob);
     }
     btn.addEventListener("mousedown", function() {
-        navigator.mediaDevices.getUserMedia({ audio: true })
+        navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000 } })
             .then(stream => {
                 mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
                 initAudioContext(stream);
@@ -135,24 +135,10 @@
         console.log('上传的文件类型为' + selectedFile.type)
         const audioElement = new Audio();
         audioElement.src = URL.createObjectURL(selectedFile);
-        // // 监听 loadedmetadata 事件以获取文件的长度信息
-        // audioElement.addEventListener('loadedmetadata', () => {
-        //     // 将文件长度从秒转换为毫秒
-        //     const durationInMilliseconds = audioElement.duration * 1000;
-        //
-        //     // 输出文件的长度（以毫秒为单位）
-        //     console.log('文件长度：', durationInMilliseconds);
-        //
-        //     // 如果需要以其他格式显示长度，可以进行转换
-        //     const minutes = Math.floor(durationInMilliseconds / (60 * 1000));
-        //     const seconds = Math.floor((durationInMilliseconds % (60 * 1000)) / 1000);
-        //     const milliseconds = Math.floor(durationInMilliseconds % 1000);
-        //     console.log(`文件长度：${minutes} 分 ${seconds} 秒 ${milliseconds} 毫秒`);
-        // });
         audioElement.play()
 
         const formData = new FormData(this);
-        const response = await fetch('http://region-3.seetacloud.com:19897/transcribe/', {
+        const response = await fetch('http://region-31.seetacloud.com:53112/transcribe/', {
             method: 'POST',
             body: formData
         });

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
+import Recorder from 'recorder-core/recorder.mp3.min'
 import axios from "axios";
 
 // ----------------------------------------------------------------------------------- 变量定义
@@ -23,7 +24,7 @@ let socket  // 双向通信通道
 // 大模型选择
 const modelValue = ref('1.0')
 const modelOptions = ref([{value: '1.0',label: 'Murphy-1.0'},{value: '2.0',label: 'Murphy-2.0'}])
-let testURL = ref('region-3.seetacloud.com:19897')
+let testURL = ref('u271424-92ae-54a09548.neimeng.seetacloud.com:6443')
 
 // 广告图片数组
 const imgList = ref(['ad1', 'ad2', 'ad3'])
@@ -152,7 +153,7 @@ const sendMessage = async () => {
 // 连接大模型
 const connect = () => {
   // 建立双向通信npm
-  socket = new WebSocket('ws://' + testURL.value + '/ws/v1/chat/completions')
+  socket = new WebSocket('wss://' + testURL.value + '/ws/v1/chat/completions')
   // 连接建立后调用函数
   socket.addEventListener('open', (event) => {
     console.log('连接开启')
@@ -313,17 +314,6 @@ const makeQueue = async(temp) => {
     sentence.value += temp
   }
 }
-// 语音文件转文字
-// const fileToText = async (event) => {
-//   event.preventDefault();
-//   const formData = new FormData(document.getElementById('uploadForm'))
-//   const response = await fetch('http://region-3.seetacloud.com:19897/transcribe/', {
-//     method: 'POST',
-//     body: formData
-//   })
-//   const result = await response.json();
-//   document.getElementById('result').textContent = result.text || result.error
-// }
 
 let loopId;
 let loopendId; // 语音播放条数是否匹配
@@ -445,6 +435,7 @@ const stopConnection = async () => {
   ai_response_content.value = ''
   controlable.value = true
 }
+
 // 点击滚动到底部按钮
 const clickToBottom = () => {
   talkBody.value.scrollTo({
@@ -460,6 +451,77 @@ const scrollToBottom = () => {
       // behavior: 'smooth',
     });
   }
+}
+
+// ---------------------------------------------------- 语音逻辑
+let rec
+let recBlob
+const recording = ref(false)
+// 开启录音权限
+const giveRecordPermission = () => {
+  rec=null
+  recBlob=null
+  //mp3格式, 指定采样率hz, 比特率kbps
+  let newRec = Recorder({
+    type:"mp3",sampleRate:16000,bitRate:16
+  })
+  //打开麦克风授权获得相关资源
+  newRec.open(function(){
+    rec = newRec
+  },function(){
+    ElMessage.error('未检测到麦克风设备/用户未授权')
+  })
+}
+
+// 开始录音
+const recordStart = () => {
+  if(rec && Recorder.IsOpen()){
+    recBlob=null;
+    rec.start();
+    recording.value = true
+    console.log('开始录音...')
+  }else{
+    ElMessage.error('未检测到麦克风设备/用户未授权')
+  }
+}
+
+// 结束录音
+const recordStop = () => {
+  if(!(rec&&Recorder.IsOpen())){
+    return
+  }
+  rec.stop(function(blob){
+    recBlob=blob
+    recording.value = false
+    console.log("录制完毕")
+    const audioFile = new File([recBlob], 'recorded.wav', { type: 'audio/wav' });
+    // 获取文件输入元素
+    const fileInput = document.querySelector('input[name="file"]');
+    // 创建一个 DataTransfer 对象
+    const dataTransfer = new DataTransfer();
+    // 将新文件对象添加到 DataTransfer
+    dataTransfer.items.add(audioFile);
+    // 将 DataTransfer 对象赋值给文件输入元素
+    fileInput.files = dataTransfer.files;
+
+    const formData = new FormData(uploadForm)
+    formData.append('file', audioFile, 'recorded.wav');
+
+      fetch('https://' + testURL.value + '/transcribe/', {
+      method: 'POST',
+      body: formData
+    })
+    .then(response => response.json())
+    .then(result => {
+      messageInput.value = result.text
+      if(result.text === '') messageInput.value = '(未识别到文字)'
+    })
+    .catch(() => {
+      messageInput.value = '转录失败...请检查与服务器之间的链接'
+    })
+  },function(msg){
+    console.log('录制失败' + msg)
+  })
 }
 
 // ---------------------------------------------------- 输入框逻辑
@@ -486,6 +548,12 @@ const adjustHeight = () => {
   scrollToBottom()
 }
 
+const adjustRecordHintBox = () => {
+  const recordingBox = document.querySelector('.recording')
+  if (recordingBox) {
+    recordingBox.style.bottom = talkBody.value.clientHeight / 2 - recordingBox.style.height + 'px'
+  }
+}
 // 键盘监听事件
 document.addEventListener('keydown', function(event) {
   // 判断按下的键是否是删除键，del键，回车发送键，撤回键
@@ -530,49 +598,9 @@ const mousewheel = (event) => {
     isBottom.value = true
   }
   adChange()
+  adjustRecordHintBox()
 }
-// const voiceStartButton = ref()
-// // const voiceStartButton = document.getElementById('buttonVoice')
-// const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)()
-// const voice = () => {
-//   console.log(recognition.state)
-//   // 检查浏览器是否支持Web Speech API
-//   if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
-//     // 创建语音识别对象
-//     // console.log(recognition)
-//     // 设置语言
-//     recognition.lang = 'zh-CN'; // 可根据需要设置其他语言
-//
-//     recognition.onstart = () => {
-//       console.log('语音识别已启动');
-//     };
-//
-//     recognition.onend = () => {
-//       console.log('语音识别已结束');
-//     };
-//     // 当识别到语音时触发此事件
-//     recognition.onresult = (event) => {
-//       console.log('识别中...')
-//       const transcript = event.results[0][0].transcript
-//       console.log('识别结果：', transcript)
-//       // 在这里可以将transcript传递给其他功能或显示在页面上
-//     };
-//
-//     // 启动语音识别
-//     voiceStartButton.value.addEventListener('mousedown', () => {
-//       console.log('按下了按键')
-//       recognition.start();
-//     });
-//
-//     voiceStartButton.value.addEventListener('mouseup', () => {
-//       console.log('松开按键')
-//       recognition.stop();
-//     });
-//   } else {
-//     console.error('浏览器不支持Web Speech API');
-//   }
-//
-// }
+
 onMounted( () => {
   let str = '<div class="machine">' +
             '  <div>' +
@@ -623,25 +651,31 @@ onMounted( () => {
   document.addEventListener('wheel', mousewheel)
   // voiceStartButton.value = document.querySelector('.button_voice')
   startTimer()
-  connect()
-  // if(localStorage.getItem('testURL')){
-  //   testURL.value = JSON.parse(localStorage.getItem('testURL'))
-  // }
-  // const myQueue = createQueue();
-  // 语音文件转文字
-  // document.getElementById('uploadForm').addEventListener('submit', async function(event) {
-  //   event.preventDefault();
-  //
-  //   const formData = new FormData(this);
-  //   const response = await fetch('http://region-3.seetacloud.com:19897/transcribe/', {
-  //     method: 'POST',
-  //     body: formData
-  //   });
-  //
-  //   const result = await response.json();
-  //   document.getElementById('result').textContent = result.text || result.error;
-  // })
+  // connect()
+  giveRecordPermission()
+
+  const buttonVoice = document.querySelector('.button_voice')
+  buttonVoice.addEventListener('mousedown', recordStart)
+  buttonVoice.addEventListener('mouseup', recordStop)
+
+
+  // 语音转录
+  document.getElementById('uploadForm').addEventListener('submit', async function(event) {
+    event.preventDefault();
+    const formData = new FormData(this);
+    const response = await fetch('http://region-31.seetacloud.com:53112/transcribe/', {
+      method: 'POST',
+      body: formData
+    });
+    const result = await response.json();
+    messageInput.value = result.text
+  })
+
+  if(localStorage.getItem('testURL')){
+    testURL.value = JSON.parse(localStorage.getItem('testURL'))
+  }
 })
+
 const printvoiceNum = () => {
   console.log('打印语音条数:' + voiceNum.value)
 }
@@ -670,16 +704,11 @@ const printSentenceTotal = () => {
       </div>
       <div class="talk_body" @scroll="mousewheel">
         <div v-if="!isBottom" class="to_bottom_button" @click="clickToBottom">↓</div>
+        <div v-if="recording" class="recording" />
         <div v-for="item in talkAllMessage" :key="item" v-html="item"/>
-<!--        <h1>语音转录</h1>-->
-<!--        <form id="uploadForm" enctype="multipart/form-data">-->
-<!--          <input type="file" name="file" accept="audio/*"><br><br>-->
-<!--          <button type="submit">上传并转录</button>-->
-<!--        </form>-->
-<!--        <h2>转录结果：</h2>-->
-<!--        <pre id="result"></pre>-->
       </div>
       <div class="talk_foot">
+        <el-button class="button_voice">语音</el-button>
         <textarea v-model="messageInput" placeholder="请输入内容" class="foot_input" />
         <button class="button_send" @click="sendMessage()" v-if="controlable">发送</button>
 <!--        <el-button style="border: 1px solid black;" @click="sendMessage()" disabled loading v-else/>-->
@@ -699,9 +728,14 @@ const printSentenceTotal = () => {
       </div>
     </div>
   </div>
-  <div class="testText" style="border: 1px solid black;width: 100vw;height: 300px;overflow: auto;position: absolute;top: 1000px">
+<!--  测试板块-->
+  <div class="testText" style="border: 1px solid black;width: 100vw;height: 300px;overflow: auto;position: absolute;top: 1000px;display: none">
     <button @click="printvoiceNum">打印语音条数</button>
     <button @click="printSentenceTotal">打印当前句子条数</button>
+    <form id="uploadForm" enctype="multipart/form-data">
+      <input type="file" name="file" accept="audio/*"><br><br>
+      <button type="submit">上传并转录</button>
+    </form>
   </div>
 </template>
 
@@ -900,6 +934,15 @@ const printSentenceTotal = () => {
   .foot_input:focus {
     outline: none;
     border: 2px solid #3498db;
+  }
+  .recording{
+    width: 100px;
+    height: 100px;
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.4);
+    bottom: 70px;
+    right: 500px;
+    border-radius: 10px;
   }
   /*广告*/
   .mainbody_ad{

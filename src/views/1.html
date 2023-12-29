@@ -3,65 +3,10 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <link rel="shortcut icon" type="image/png" href="assets/icon.png">
-
-    <title reclang="XvFp">Recorder H5 QuickStart: 快速入门</title>
     <script>var PageLM="2023-12-08 20:41";</script>
-    <!--
-    你可以直接将 QuickStart.html 文件copy到你的(https)网站中，无需其他文件，就能正常开始测试了。
-    You can directly copy the QuickStart.html file to your (https) website, and you can start testing normally without other files.
-    -->
 </head>
 
 <body>
-<!-- ↓↓↓这部分代码无关紧要，可全部删掉，选择CDN线路用的↓↓↓ -->
-<!-- ↓↓↓This part of the code is irrelevant, you can delete it all, and choose the CDN line↓↓↓ -->
-<script>
-    var DisableCDN=!!localStorage["Rec_QuickStart_DisableCDN"];
-    if(/xiangyuecn\.git/.test(location.host))DisableCDN=true;
-    if(!DisableCDN){
-        console.warn("本页面的js资源采用的CDN链接，这些CDN并不稳定，仅供测试用。The CDN links used by the js resources on this page are not stable and are only for testing.");
-        setCDNUrl("https://cdn.jsdelivr.net/gh/xiangyuecn/Recorder@latest/");
-    }
-    function setCDNUrl(url){
-        if(DisableCDN)return;
-        var old=document.querySelector("base");
-        if(old)old.parentNode.removeChild(old);
-        if(!url)return;
-        var base=document.createElement("base");
-        base.setAttribute("href",url);
-        document.head.appendChild(base);
-        console.warn("已切换CDN线路。CDN line switched.",url);
-    };
-    var useCDN={};
-    var intBadCDN=setTimeout(function(){ onBadCDN() },10000);
-    var onOKCDN=function(){ clearTimeout(intBadCDN) };
-    var onBadCDN=function(){
-        if(DisableCDN)return;
-        clearTimeout(intBadCDN);
-        var cdn=useCDN.cdn;
-        var url=!cdn?"https://xiangyuecn.gitee.io/recorder/":"";
-        if(!url){ setCDNUrl(""); return;}
-        location.hash="#useCDN="+encodeURIComponent(JSON.stringify({
-            time:Date.now()
-            ,cdn:url
-        }));
-        location.reload();
-    };
-    if(/useCDN=([^&#]+)/.test(location.href)){
-        useCDN=JSON.parse(decodeURIComponent(RegExp.$1));
-        if(Date.now()-useCDN.time<60000){
-            setCDNUrl(useCDN.cdn);
-        }else{ useCDN={}; }
-        location.hash="";
-    }
-</script>
-<!-- ↑↑↑这部分代码无关紧要，可全部删掉，选择CDN线路用的↑↑↑ -->
-<!-- ↑↑↑This part of the code is irrelevant, you can delete it all, and choose the CDN line↑↑↑ -->
-
-
-
-
 <!--
 【1】引入框架文件  Import plugin file   ，注意自己使用时应当自己把源码clone下来，然后通过src="/src/recorder-core.js"引入，这里为了方便copy文件测试起见，使用了JsDelivr CDN，这玩意不一定能正常访问
 
@@ -79,32 +24,11 @@
 <script src="改成你clone的源码目录/../src/extensions/frequency.histogram.view.js"></script>
 <script src="改成你clone的源码目录/../src/extensions/lib.fft.js"></script>
 
-<!-- 【*】无关js，仅供本页面用的国际化多语言支持，可删除。  It has nothing to do with js, it is only for international multilingual support for this page, it can be deleted. -->
-<script src="改成你clone的源码目录/../assets/ztest-page-i18n.js"></script>
-<script src="改成你clone的源码目录/../assets/zdemo.widget.donate.js"></script>
-
 <script>window.setCDNUrl&&setCDNUrl("");//清除CDN地址  Clear CDN URLs</script>
 
 
 <!-- 【2】构建界面  Build the web interface  -->
 <div class="main">
-    <div class="i18nBox"></div>
-<!--    <div class="mainBox topLinks">-->
-<!--        <span style="font-size:32px;color:#f60;" reclang="JM2s">Recorder H5 QuickStart: 快速入门</span>-->
-<!--        <a href="https://github.com/xiangyuecn/Recorder" target="_blank">GitHub</a>-->
-<!--        | <a href="https://gitee.com/xiangyuecn/Recorder" target="_blank">Gitee</a>-->
-
-<!--        <div style="padding-top:10px;color:#666">-->
-<!--            <span reclang="FxZ3">更多Demo：</span>-->
-<!--            <a class="lb" href="https://xiangyuecn.gitee.io/recorder/" target="_blank">Recorder H5</a>-->
-<!--            <a class="lb" href="https://xiangyuecn.gitee.io/recorder/assets/demo-vue/" target="_blank">H5 vue</a>-->
-<!--            <a class="lb" href="https://xiangyuecn.gitee.io/recorder/app-support-sample/" target="_blank">Recorder App</a>-->
-<!--            <a class="lb" href="https://xiangyuecn.gitee.io/recorder/app-support-sample/QuickStart.html" target="_blank">App QuickStart</a>-->
-
-<!--            <a class="lb" href="https://xiangyuecn.gitee.io/recorder/assets/工具-GitHub页面历史版本访问.html#url=xiangyuecn:Recorder@1.0.20032600,/QuickStart.html" target="_blank" reclang="UGOA">切换到老版本测试</a>-->
-<!--        </div>-->
-<!--    </div>-->
-
     <div class="mainBox">
         <!-- 按钮控制区域  Control button area -->
         <div class="pd btns">
@@ -128,20 +52,20 @@
         </div>
 
         <!-- 波形绘制区域  Waveform drawing area -->
-<!--        <div style="padding-top:5px">-->
-<!--            <div style="border:1px solid #ccc;display:inline-block;vertical-align:bottom"><div style="height:100px;width:300px;" class="recwave"></div></div>-->
+        <div style="padding-top:5px">
+            <div style="border:1px solid #ccc;display:inline-block;vertical-align:bottom"><div style="height:100px;width:300px;" class="recwave"></div></div>
 
-<!--            <div style="height:40px;width:300px;margin-top:5px;display:inline-block;vertical-align:bottom;background:#999;position:relative;">-->
-<!--                <div class="recpowerx" style="height:40px;background:#0B1;position:absolute;"></div>-->
-<!--                <div class="recpowert" style="padding-left:50px; line-height:40px; position: relative;"></div>-->
-<!--            </div>-->
-<!--        </div>-->
+            <div style="height:40px;width:300px;margin-top:5px;display:inline-block;vertical-align:bottom;background:#999;position:relative;">
+                <div class="recpowerx" style="height:40px;background:#0B1;position:absolute;"></div>
+                <div class="recpowert" style="padding-left:50px; line-height:40px; position: relative;"></div>
+            </div>
+        </div>
     </div>
 
     <!-- 日志输出区域  Log output area -->
-<!--    <div class="mainBox">-->
-<!--        <div class="reclog"></div>-->
-<!--    </div>-->
+    <div class="mainBox">
+        <div class="reclog"></div>
+    </div>
 </div>
 
 
