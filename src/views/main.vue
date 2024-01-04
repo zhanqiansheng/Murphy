@@ -1,7 +1,11 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
-import Recorder from 'recorder-core/recorder.mp3.min'
+import Recorder from 'recorder-core'
+import 'recorder-core/src/engine/mp3'
+import 'recorder-core/src/engine/mp3-engine'
+// import Recorder from 'recorder-core/recorder.mp3.min'
 import axios from "axios";
+import { Microphone, ChatLineRound, WarningFilled } from '@element-plus/icons-vue'
 
 // ----------------------------------------------------------------------------------- 变量定义
 
@@ -16,10 +20,12 @@ const ai_response_content = ref('') // ai的单条回复内容
 let response_box = ref()   // ai最新答复的聊天框
 let talkBody = ref()       // 整体聊天框
 let foot_input = ref()       // 输入框
+let turnVoice = ref(false)
 
 let isBottom = ref(true) // 是否位于底部
 let controlable = ref(true)   // 用户是否可输入的状态变量
 let socket  // 双向通信通道
+let voiceOpen = ref(false) // 是否开启语音播放
 
 // 大模型选择
 const modelValue = ref('1.0')
@@ -50,7 +56,6 @@ const adChange = () => {
   const point = pointList.children[adIndex.value]
   point.style.backgroundColor = 'white'
 }
-
 // 广告手动翻页
 const adIndexChange = (value) => {
   adIndex.value += value
@@ -61,7 +66,6 @@ const adIndexChange = (value) => {
   }
   adChange()
 }
-
 // 开启定时器
 const startTimer = () => {
   adChange()
@@ -74,26 +78,21 @@ const startTimer = () => {
     adChange()
   }, 3000)
 }
-
 // 点击广告的下标圆点
 const adChoice = (index) => {
   adIndex.value = index
   adChange()
 }
-
 // 获取海报图片路径
 const getImagePath = (imageName) => {
   if (imageName === 'ad1') return ad1
   if (imageName === 'ad2') return ad2
   if (imageName === 'ad3') return ad3
 }
+
 // ---------------------------------------------------- 发送逻辑
-// 发送消息
-const sendMessage = async () => {
-  // 过滤用户携带的<>括号
-  message.value = messageInput.value.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  if (messageInput.value.trim() === '' || controlable.value === false) return
-  // 发送前状态重置
+// 发送前状态重置
+const beforeSendMessage = () => {
   voiceNum.value = 0
   sentenceTotal.value = 0
   controlable.value = false
@@ -101,20 +100,28 @@ const sendMessage = async () => {
   voiceQueue.clear()
   msgQueue.clear()
   sentence.value = ''
+}
+// 发送消息
+const sendMessage = async () => {
+  // 过滤用户携带的<>括号
+  message.value = messageInput.value.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  if (messageInput.value.trim() === '' || controlable.value === false) return
+  beforeSendMessage()
   // 将用户输入上传到页面
   let str = '<div class="human">'
           + '  <div class="talk_box right">' + message.value + '</div>'
           + '  <div><div class="head_pic human_pic"></div></div>'
           + '</div>'
   talkAllMessage.value.push(str)
-
   // 用户发送消息后1ms，滑动到底部，发送请求
   setTimeout(() => {
     scrollToBottom()
     try {
       // 尝试发送消息
       if (socket.readyState === WebSocket.OPEN) {
+        // 语音发送一定要发送两遍，不然没效果
         socket.send(message.value)
+        if(turnVoice.value) socket.send(message.value)
         times.value = 1
       } else {
         ElMessage({
@@ -149,7 +156,6 @@ const sendMessage = async () => {
     response_box = children[children.length - 1]
   }, 2)
 }
-
 // 连接大模型
 const connect = () => {
   // 建立双向通信npm
@@ -169,14 +175,13 @@ const connect = () => {
   // 处理服务器返回数据
   socket.addEventListener('message', (event) => {
     let temp = event.data.replace(/</g, '&lt;')
-    makeQueue(temp) // 制作句子队列，等待转语音
+    if (voiceOpen.value) makeQueue(temp) // 制作句子队列，等待转语音
     // 设置聊天框内的文字内容
     const target = response_box.querySelector('.talk_box')
     if(target.innerHTML === '......') target.innerHTML = ''
     // 传输已结束
     if(temp === '[DONE]'){
       console.log('---传输完毕，请继续输入---')
-      // times.value = 3
       sentence.value = ''
       ai_response_content.value = ''
       controlable.value = true
@@ -228,6 +233,16 @@ const connect = () => {
 }
 
 // ---------------------------------------------------- 语音逻辑
+// 开启/关闭语音
+const openVoice = () => {
+  voiceOpen.value = !voiceOpen.value
+  if(voiceOpen.value){
+    ElMessage.success('声音已开启')
+  }else {
+    if(audio) audio.pause()
+    ElMessage.info('声音已关闭')
+  }
+}
 // 队列封装
 function createQueue() {
   const items = [];
@@ -301,11 +316,9 @@ const makeQueue = async(temp) => {
       if(times.value > 0) {
         // 只在第一次时在这里播放，此后都是在音频播放判断结束后进行播放
         times.value--
-        // let temp = msgQueue.front()
-        // msgQueue.outqueue()
-        // await sendMessageToMicrosoft(temp, 0)
         await sendMessageToMicrosoft(msgQueue.front(), 0)
         if(times.value === 0){
+          console.log('第一句在这里播放')
           playAudio()
         }
       }
@@ -315,28 +328,36 @@ const makeQueue = async(temp) => {
   }
 }
 
-let loopId;
-let loopendId; // 语音播放条数是否匹配
-let audio;
+let loopId
+let loopendId // 语音播放条数是否匹配
+let audio
 // 播放语音
 const playAudio = () => {
+  // if(audio) audio.pause()
   audio = voiceQueue.front()
-  audio.play()
-  document.querySelector('.testText').innerHTML += '音频播放开始<br>'
+  // audio.play()
+  audio.muted = true;
+  audio.play();
+  audio.muted = false;
+  // document.querySelector('.testText').innerHTML += '音频播放开始<br>'
   voiceNum.value++
   console.log('当前语音是第' + voiceNum.value + '条, sentenceTotal的值为' + sentenceTotal.value)
+  // if(voiceNum.value > sentenceTotal.value) {
+  //   audio.pause()
+  //   return
+  // }
   let flag = 0
 
   // 添加timeupdate事件监听器
   audio.addEventListener('timeupdate', () => {
     const currentTime = audio.currentTime
     const duration = audio.duration
-    // 如果当前时间距离结束不足三秒
-    if (duration - currentTime < 3) {
+    // 如果当前时间距离结束不足5秒
+    if (duration - currentTime < 8) {
       if (flag === 0) {
         flag = 1
         // 还不能发送，代表第二句还没生成完，执行循环
-        if(msgQueue.size()<=0 && controlable.value === false) {
+        if(msgQueue.size()===0 && controlable.value === false) {
           loopId = setInterval(()=>{
             if(msgQueue.size()>0){
               sendMessageToMicrosoft(msgQueue.front(), 1)
@@ -352,35 +373,34 @@ const playAudio = () => {
 
   // 在音频播放结束时执行函数
   audio.addEventListener('ended', () => {
-    document.querySelector('.testText').innerHTML += '音频播放结束<br>'
-      voiceQueue.outqueue()
-      if (!voiceQueue.isEmpty()) {
-        // voiceQueue不为空，继续播放
-        playAudio()
-      }
-      else if(voiceNum.value !== sentenceTotal.value) {
-        loopendId = setInterval(()=>{
-          if (!voiceQueue.isEmpty()) {
-            // voiceQueue不为空，继续播放
-            playAudio()
-          }
-          if (voiceNum.value === sentenceTotal.value ){
-            clearInterval(loopendId)
-          }
-        }, 1000)
-      }
-      else if (voiceNum.value === sentenceTotal.value ){
-        console.log('所有语音播放完毕')
-        document.querySelector('.testText').innerHTML += '所有语音播放完毕<br>'
-        ElMessage.success('播放完毕')
-      }
-  });
+    voiceQueue.outqueue() // 当前语音出列
+    if (!voiceQueue.isEmpty()) { // voiceQueue不为空，继续播放
+      console.log('第二句已准备好，可以直接播放')
+      playAudio()
+    }
+    else if(voiceNum.value !== sentenceTotal.value) { // 语音与总句子数不匹配，进入等待
+      loopendId = setInterval(()=>{
+        console.log('第二句还没好！，循环等待中')
+        if (!voiceQueue.isEmpty()) { // voiceQueue不为空，表示已请求到语音继续播放
+          console.log('第二句好了！，开始播放')
+          playAudio()
+          clearInterval(loopendId)
+          console.log('已请求到语音, 继续播放')
+        }
+      }, 1000)
+    }
+    else if (voiceNum.value === sentenceTotal.value ){
+      console.log('所有语音播放完毕')
+      // ElMessage.success('播放完毕')
+    }
+  })
 }
 
 // 向微软发送请求语音合成api请求，将
 const sendMessageToMicrosoft = async(msg, num) => {
     // if (num===1)
     msgQueue.outqueue()
+    console.log('发送语音请求中，内容：' + msg)
     const subscriptionKey = '854b68902a2d42f39acb0b8fb789342d';
     const region = 'japaneast';
     const aiName = 'zh-CN-XiaoxiaoNeural'
@@ -412,7 +432,7 @@ const sendMessageToMicrosoft = async(msg, num) => {
         // 将获取到的语音压入队列
         voiceQueue.inqueue(audio)
         console.log('---请求音频完成, 请求内容：---\n' +  msg)
-        document.querySelector('.testText').innerHTML += '---请求音频完成, 请求内容：---<br>' + msg + '<br>'
+        // document.querySelector('.testText').innerHTML += '---请求音频完成, 请求内容：---<br>' + msg + '<br>'
         // msgQueue.outqueue()
       } else {
         console.error('api访问错误:', synthesisResponse.body);
@@ -420,18 +440,18 @@ const sendMessageToMicrosoft = async(msg, num) => {
     } else {
       console.log('token访问失败!访问次数过于频繁，请稍后重试')
       ElMessage.error('语音访问过于频繁，请稍后重试')
-      document.querySelector('.testText').innerHTML += '语音访问过于频繁，请稍后重试'
+      // document.querySelector('.testText').innerHTML += '语音访问过于频繁，请稍后重试'
     }
 }
 // 包含以下标点符号的字符串
 const onlyMark = (temp) => {
-  const mark = ["。", "！", "？", "!", ".", "?", "：", "**"]
+  const mark = ["。", "！", "？", "!", ". ", "?", "：", "**"]
   return mark.includes(temp)
 }
 
 // 中止回答
 const stopConnection = async () => {
-  await axios.post('http://' + testURL.value + '/stop-processing')
+  await axios.post('https://' + testURL.value + '/stop-processing')
   ai_response_content.value = ''
   controlable.value = true
 }
@@ -472,7 +492,7 @@ const giveRecordPermission = () => {
     ElMessage.error('未检测到麦克风设备/用户未授权')
   })
 }
-
+let timeCounter = 0
 // 开始录音
 const recordStart = () => {
   if(!rec){
@@ -482,8 +502,19 @@ const recordStart = () => {
   if(rec && Recorder.IsOpen()){
     recBlob=null;
     rec.start();
-    recording.value = true
+    setTimeout(()=>{recording.value = true}, 0)
     console.log('开始录音...')
+    timeCounter = Date.now()
+    const foot_voice = document.querySelector('.foot_voice')
+    foot_voice.innerHTML = '录制中...'
+    adjustRecordHintBox()
+    // 录音开始时打断AI的语音播报
+    if (audio) audio.pause()
+    voiceQueue.clear()
+    msgQueue.clear()
+    const recordingBox = document.querySelector('.recording')
+    recordingBox.style.bottom = talkBody.value.clientHeight/ 2 - recordingBox.style.height / 2+ 'px'
+    recordingBox.style.left = talkBody.value.clientWidth/ 2 - recordingBox.clientWidth / 2 + 'px'
   }else{
     ElMessage.error('未检测到麦克风设备/用户未授权')
   }
@@ -494,10 +525,27 @@ const recordStop = () => {
   if(!(rec&&Recorder.IsOpen())){
     return
   }
-  rec.stop(function(blob){
+  rec.stop(async (blob) => {
     recBlob=blob
     recording.value = false
+    if (Date.now() - timeCounter < 1000) { // 提示录音时间过短
+      const foot_voice = document.querySelector('.foot_voice')
+      foot_voice.innerHTML = '单击开启录制'
+      ElMessage.error('录音时间过短!')
+      return
+    }
     console.log("录制完毕")
+    // 停止AI文字回复
+    await stopConnection()
+    await stopConnection()
+    let str = '<div class="human">'
+        + '  <div class="talk_box right">......</div>'
+        + '  <div><div class="head_pic human_pic"></div></div>'
+        + '</div>'
+    talkAllMessage.value.push(str)
+    setTimeout(()=>{scrollToBottom()}, 10)
+    const foot_voice = document.querySelector('.foot_voice')
+    foot_voice.innerHTML = '单击开启录制'
     const audioFile = new File([recBlob], 'recorded.wav', { type: 'audio/wav' });
     // 获取文件输入元素
     const fileInput = document.querySelector('input[name="file"]');
@@ -511,17 +559,34 @@ const recordStop = () => {
     const formData = new FormData(uploadForm)
     formData.append('file', audioFile, 'recorded.wav');
 
-      fetch('https://' + testURL.value + '/transcribe/', {
+    const children = talkBody.value.children
+    let targetChild = children[children.length - 1].querySelector('.talk_box')
+    setTimeout(()=>{
+      targetChild = children[children.length - 1].querySelector('.talk_box')
+    }, 10)
+
+    fetch('https://' + testURL.value + '/transcribe/', {
       method: 'POST',
       body: formData
     })
     .then(response => response.json())
-    .then(result => {
-      messageInput.value = result.text
-      if(result.text === '') messageInput.value = '(未识别到文字)'
+    .then(async (result) =>  {
+      // console.log('result.text = ' + result.text)
+      if(result.text === ''){
+        targetChild.innerHTML = '(未识别到文字)'
+        targetChild.style.color = 'red'
+        // messageInput.value = '测试用文字'
+        // talkAllMessage.value.pop()
+        // sendMessage()
+      } else {
+        messageInput.value = result.text
+        talkAllMessage.value.pop()
+        await sendMessage()
+      }
     })
     .catch(() => {
-      messageInput.value = '转录失败...请检查与服务器之间的链接'
+      targetChild.innerHTML = '转录失败...请检查与服务器之间的链接'
+      targetChild.style.color = 'red'
     })
   },function(msg){
     console.log('录制失败' + msg)
@@ -535,27 +600,38 @@ watch(messageInput, () => {
 })
 
 // 控制输入框高度
-const adjustHeight = () => {
-  switch ( foot_input.value.scrollHeight ) {
-    case 35: rowsNum.value = 1;break;
-    case 60: rowsNum.value = 2;break;
-    case 85: rowsNum.value = 3;break;
-    case 110: rowsNum.value = 4;break;
-    case 135: rowsNum.value = 5;break;
-    default: rowsNum.value = 6;break;
+const adjustHeight = (num) => {
+  if (num === 1) {
+    rowsNum.value = 1
+    setTimeout(()=>{
+      foot_input.value.style.height = rowsNum.value * 25 + 'px'
+    }, 0)
+  } else {
+    switch ( foot_input.value.scrollHeight ) {
+      case 35: rowsNum.value = 1;break;
+      case 60: rowsNum.value = 2;break;
+      case 85: rowsNum.value = 3;break;
+      case 110: rowsNum.value = 4;break;
+      case 135: rowsNum.value = 5;break;
+      default: rowsNum.value = 6;break;
+    }
+    const toBottomButton = document.querySelector('.to_bottom_button')
+    if (toBottomButton) {
+      toBottomButton.style.bottom = 80 + (rowsNum.value - 1) * 25 + 'px'
+    }
+    foot_input.value.style.height = rowsNum.value * 25 + 'px'
+    scrollToBottom()
   }
-  const toBottomButton = document.querySelector('.to_bottom_button')
-  if (toBottomButton) {
-    toBottomButton.style.bottom = 80 + (rowsNum.value - 1) * 25 + 'px'
-  }
-  foot_input.value.style.height = rowsNum.value * 25 + 'px'
-  scrollToBottom()
 }
 
+// 控制录音提示的位置
 const adjustRecordHintBox = () => {
   const recordingBox = document.querySelector('.recording')
   if (recordingBox) {
-    recordingBox.style.bottom = talkBody.value.clientHeight / 2 - recordingBox.style.height + 'px'
+    setTimeout(()=>{
+      recordingBox.style.bottom = talkBody.value.clientHeight/ 2 - recordingBox.style.height / 2+ 'px'
+      recordingBox.style.left = talkBody.value.clientWidth/ 2 - recordingBox.clientWidth / 2 + 'px'
+    }, 0)
   }
 }
 // 键盘监听事件
@@ -569,7 +645,7 @@ document.addEventListener('keydown', function(event) {
   }
   // 检测非shift+enter换行：回车发送
   if (!event.shiftKey && event.key === 'Enter') {
-    event.preventDefault();
+    event.preventDefault()
     sendMessage()
   }
 })
@@ -595,22 +671,27 @@ const clearHistory = () => {
 // 鼠标滚轮滑动事件
 const mousewheel = (event) => {
   // 向上滚动，取消自动滑动
-  if (event.deltaY < 0) {
-    isBottom.value = false
-  }
-  if(talkBody.value.scrollHeight - talkBody.value.scrollTop <= talkBody.value.clientHeight + 2) {
-    isBottom.value = true
-  }
-  adChange()
-  adjustRecordHintBox()
+    if (event.deltaY < 0) {
+      isBottom.value = false
+    }
+    if(talkBody.value.scrollHeight - talkBody.value.scrollTop <= talkBody.value.clientHeight + 2) {
+      isBottom.value = true
+    }
+    adChange()
+
+    if (event.ctrlKey) adjustRecordHintBox()
 }
 
 onMounted( () => {
+  if(localStorage.getItem('testURL')){
+    testURL.value = JSON.parse(localStorage.getItem('testURL'))
+    connect()
+  }
   let str = '<div class="machine">' +
             '  <div>' +
             '    <div class="head_pic machine_pic"></div>' +
             '  </div>' +
-            '  <div class="talk_box">测试用文本：<br>测试的基本步骤<br>介绍一下你自己<br>介绍一下深圳<br>用js写一段代码，循环打印1到100之间被3整除的数字</div>' +
+            '  <div class="talk_box">今日端口：' + testURL.value + '<br>测试用文本：<br>测试的基本步骤<br>介绍一下你自己<br>介绍一下深圳<br>用js写一段代码，循环打印1到100之间被3整除的数字</div>' +
             '</div>'
   talkAllMessage.value.push(str)
   talkBody.value = document.querySelector('.talk_body')
@@ -655,31 +736,30 @@ onMounted( () => {
   document.addEventListener('wheel', mousewheel)
   // voiceStartButton.value = document.querySelector('.button_voice')
   startTimer()
-  // connect()
   // giveRecordPermission()
 
-  const buttonVoice = document.querySelector('.button_voice')
-  buttonVoice.addEventListener('mousedown', recordStart)
-  buttonVoice.addEventListener('mouseup', recordStop)
-
-
-  // 语音转录
-  document.getElementById('uploadForm').addEventListener('submit', async function(event) {
-    event.preventDefault();
-    const formData = new FormData(this);
-    const response = await fetch('http://region-31.seetacloud.com:53112/transcribe/', {
-      method: 'POST',
-      body: formData
-    });
-    const result = await response.json();
-    messageInput.value = result.text
+  const foot_voice = document.querySelector('.foot_voice')
+  foot_voice.addEventListener('click', () => {
+    if (recording.value === false) {
+      recordStart()
+    } else if (recording.value) {
+      recordStop()
+    }
   })
-
-  if(localStorage.getItem('testURL')){
-    testURL.value = JSON.parse(localStorage.getItem('testURL'))
-  }
 })
-
+let isFirstTimeOpenWeb = 1
+// 语音与文字模式切换
+const turnVoiceOrText = () => {
+  turnVoice.value = !turnVoice.value
+  // 第一次时请求录音权限
+  if(turnVoice && isFirstTimeOpenWeb){
+    giveRecordPermission()
+    isFirstTimeOpenWeb = 0
+  }
+  adjustRecordHintBox()
+  adjustHeight(1)
+  if (!turnVoice.value) recordStop()
+}
 const printvoiceNum = () => {
   console.log('打印语音条数:' + voiceNum.value)
 }
@@ -692,6 +772,8 @@ const printSentenceTotal = () => {
   <div class="mainbody">
     <div class="mainbody_talk">
       <div class="talk_head">
+        <div class="voiceButton" @click="openVoice()" v-if="!voiceOpen"/>
+        <div class="voiceButton" style="background-image: url('/src/assets/openvoice.png');border: 2px solid greenyellow;" @click="openVoice()" v-if="voiceOpen"/>
         <el-select v-model="modelValue" placeholder="请选择">
           <el-option
               v-for="item in modelOptions"
@@ -702,20 +784,27 @@ const printSentenceTotal = () => {
         </el-select>
         <div>智能Murphy</div>
 <!--        <button @click="clearHistory()">清空会话历史</button>-->
-        <input style="width: 350px;height: 90%" v-model="testURL" placeholder="输入测试链接...">
-        <button style="width: auto" @click="connect()">←点击连接该端口</button>
-<!--        <button style="width: auto" id="buttonVoice">语音播报</button>-->
+        <input style="width: 150px;height: 90%" v-model="testURL" placeholder="输入测试链接...">
+        <button style="width: auto" @click="connect()">点击连接</button>
       </div>
       <div class="talk_body" @scroll="mousewheel">
         <div v-if="!isBottom" class="to_bottom_button" @click="clickToBottom">↓</div>
-        <div v-if="recording" class="recording" />
+        <div v-show="recording" class="recording">
+          <el-icon style="padding: 10px 20px 0;font-size: 60px;margin-left: auto; color: rgba(0, 0, 0, 0.6);"><Microphone /></el-icon>
+          <div style="font-size: 14px;color: black;text-align: center">录制中</div>
+        </div>
+        <form id="uploadForm" enctype="multipart/form-data" style="display: none">
+          <input type="file" name="file" accept="audio/*">
+          <button type="submit">上传并转录</button>
+        </form>
         <div v-for="item in talkAllMessage" :key="item" v-html="item"/>
       </div>
       <div class="talk_foot">
-        <el-button class="button_voice">语音</el-button>
-        <textarea v-model="messageInput" placeholder="请输入内容" class="foot_input" />
-        <button class="button_send" @click="sendMessage()" v-if="controlable">发送</button>
-<!--        <el-button style="border: 1px solid black;" @click="sendMessage()" disabled loading v-else/>-->
+        <el-icon class="button_turn" @click="turnVoiceOrText()" v-if="!turnVoice"><Microphone /></el-icon>
+        <el-icon class="button_turn" @click="turnVoiceOrText()" v-if="turnVoice"><ChatLineRound /></el-icon>
+        <textarea v-model="messageInput" placeholder="请输入内容" class="foot_input" v-show="!turnVoice"/>
+        <div class="foot_voice" v-show="turnVoice">单击开启录制</div>
+        <button class="button_send" @click="sendMessage()" v-if="controlable" v-show="!turnVoice">发送</button>
         <button class="button_stop" @click="stopConnection()" v-else>停止</button>
       </div>
     </div>
@@ -732,15 +821,15 @@ const printSentenceTotal = () => {
       </div>
     </div>
   </div>
-<!--  测试板块-->
-  <div class="testText" style="border: 1px solid black;width: 100vw;height: 300px;overflow: auto;position: absolute;top: 1000px;display: none">
-    <button @click="printvoiceNum">打印语音条数</button>
-    <button @click="printSentenceTotal">打印当前句子条数</button>
-    <form id="uploadForm" enctype="multipart/form-data">
-      <input type="file" name="file" accept="audio/*"><br><br>
-      <button type="submit">上传并转录</button>
-    </form>
+  <div class="beian">
+    <div style="margin-top: 0"><a href="https://beian.miit.gov.cn/" class="icp">粤ICP备2023152770号</a></div>
+    <div class="gwab">/粤公网安备11***********号</div>
   </div>
+<!--  测试板块-->
+<!--  <div class="testText" style="border: 1px solid black;width: 100vw;height: 300px;overflow: auto;position: absolute;top: 1000px;display: none">-->
+<!--    <button @click="printvoiceNum">打印语音条数</button>-->
+<!--    <button @click="printSentenceTotal">打印当前句子条数</button>-->
+<!--  </div>-->
 </template>
 
 <style>
@@ -777,10 +866,25 @@ const printSentenceTotal = () => {
     background-color: rgb(240, 251, 255);
     position: relative;
   }
+  .voiceButton{
+    width: 40px;
+    height: 40px;
+    border-radius: 40px;
+    position: absolute;
+    top: 4px;
+    left: 9px;
+    cursor: pointer;
+    border: 1px solid red;
+    /*box-sizing: border-box;*/
+    background-image: url("/src/assets/novoice.jpg");
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+  }
   .talk_head .el-select{
     width: 150px;
     position: absolute;
-    margin: 9px auto auto 15px;
+    margin: 9px auto auto 60px;
     border-radius: 5px;
   }
   .talk_head div {
@@ -923,10 +1027,27 @@ const printSentenceTotal = () => {
     border: 1px solid #3498db;
     background-color: rgb(236, 245, 255);
   }
+  .button_turn{
+    border: 2px solid black;
+    width: 35px;
+    height: 35px;
+    border-radius: 30px;
+    margin: 12px 0 12px 10px;
+    color: black;
+    box-sizing: border-box;
+    transition: border 0.1s;
+    font-size: 20px;
+    cursor: pointer;
+  }
+  .button_turn:hover{
+    color: #3498db;
+    border: 2px solid #3498db;
+    background-color: rgb(226, 245, 255);
+  }
   .foot_input{
     padding: 5px 10px 5px 10px;
-    width: 48vw;
-    min-width: 570px;
+    width: 45vw;
+    min-width: 500px;
     resize: none;
     margin: 10px 0 10px 10px;
     border-radius: 5px;
@@ -939,20 +1060,37 @@ const printSentenceTotal = () => {
     outline: none;
     border: 2px solid #3498db;
   }
+  .foot_voice{
+    padding: 5px 10px 5px 10px;
+    width: 45vw;
+    min-width: 520px;
+    resize: none;
+    margin: 10px 0 10px 10px;
+    border-radius: 5px;
+    font-size: 15px;
+    transition: border 0.1s;
+    border: 2px solid #dddddd;
+    line-height: 25px;
+    text-align: center;
+    cursor: pointer;
+    background-color: #fff;
+  }
+  .foot_voice:hover{
+    color: #3498db;
+    outline: none;
+    border: 2px solid rgba(0, 212, 255, 0.2);
+    background-color: #efffff;
+  }
   .recording{
     width: 100px;
     height: 100px;
     position: absolute;
     background-color: rgba(0, 0, 0, 0.4);
-    bottom: 70px;
-    right: 500px;
     border-radius: 10px;
+    bottom: 80px;
   }
   /*广告*/
   .mainbody_ad{
-    /*width: 400px;*/
-    /*min-width: 400px;*/
-    /*height: 800px;*/
     width: 20%; /* 设置宽度为视口宽度的20% */
     height: auto; /* 高度自适应，保持原始宽高比 */
     max-width: 400px; /* 设置最大宽度，以防止图像放大过多 */
@@ -960,7 +1098,7 @@ const printSentenceTotal = () => {
     min-width: 200px;
     min-height: 400px;
     border: 1px solid black;
-    margin: 50px auto auto 10%;
+    margin: 30px auto auto 5%;
     box-sizing: border-box;
     border-radius: 5px;
     overflow: hidden;
@@ -1028,5 +1166,27 @@ const printSentenceTotal = () => {
     background-color: white;
     border: 2px solid black;
     margin: 9px 10px 10px 10px;
+  }
+  .beian{
+    display: flex;
+    position: absolute;
+    bottom: 0;
+    right: 10px;
+    height: 21px;
+  }
+  .icp{
+    font-size: 13px;
+    color: #889399;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .icp:hover{
+    color: #BCBEC0;
+  }
+  .gwab{
+    font-size: 12px;
+    height: 17px;
+    color: #6A7176;
+    margin-top: 3px;
   }
 </style>
