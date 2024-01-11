@@ -691,6 +691,7 @@ const adjustHeight = (num) => {
       foot_input.value.style.height = rowsNum.value * 25 + 'px'
     }, 0)
   } else {
+    setTimeout(()=>{
     switch ( foot_input.value.scrollHeight ) {
       case 35: rowsNum.value = 1; break;
       case 60: rowsNum.value = 2; break;
@@ -706,6 +707,10 @@ const adjustHeight = (num) => {
       default: rowsNum.value = 6;break;
     }
     if (isMobile.value) {
+      if ( foot_input.value.scrollHeight > 100 ) {
+        rowsNum.value = 4
+        talkFoot.value.style.height = '116px'
+      }
       if (rowsNum.value === 6) rowsNum.value = 4
       let mobile_foot_input = document.querySelector('.mobile_foot_input')
       if (rowsNum.value === 1){
@@ -721,6 +726,7 @@ const adjustHeight = (num) => {
     }
     foot_input.value.style.height = rowsNum.value * 25 + 'px'
     scrollToBottom()
+    }, 0)
   }
 }
 
@@ -945,7 +951,7 @@ onMounted( () => {
         <div class="mobile_foot_voice" v-show="recordMode  && turnVoice" id="mobile_foot_voice">按住 说话</div>
         <div class="mobile_foot_voice" v-show="!recordMode && turnVoice" id="mobile_foot_voice_copy">单击开始录制</div>
 
-        <el-popover :visible="messageIsEmpty" placement="top-start" :width="150" content="请勿发送空内容!" popper-style="box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);height: 30px;line-height: 30px;font-size: 15px">
+        <el-popover :visible="messageIsEmpty" placement="top-start" :width="150" content="请勿发送空内容!" popper-style="box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);height: 30px;line-height: 5px;font-size: 15px">
           <template #reference>
             <el-button style="opacity: 0;height: 1px;position: absolute;right: 8px;" disabled/>
           </template>
@@ -1211,7 +1217,7 @@ onMounted( () => {
   color: red;
   border-radius: 0.5rem;
   text-align: center;
-  line-height: 2rem;
+  line-height: 1.5rem;
   border: 2px solid red;
 }
 .mobile_foot_input {
