@@ -56,14 +56,14 @@ onBeforeMount(() => {
       </div>
     </div>
     <div class="mobile_head" v-if="isMobile">
-      <div style="height: 2.5rem;display: flex">
+      <div style="height: 40px;display: flex">
         <img src="../assets/logo2.png" class="mobile_head_icon">
       </div>
       <div class="mobile_head_navigation" @click="handleNavigationClick">
         <router-link :class="{'mobile_navigation_button':1, 'mobile_active': isActive('/main')}" to="/main">首页</router-link>
         <router-link :class="{'mobile_navigation_button':1, 'mobile_active': isActive('/shop')}" to="/shop">商城</router-link>
-        <router-link :class="{'mobile_navigation_button':1, 'mobile_active': isActive('/about')}" to="/about">测试</router-link>
-        <router-link :class="{'mobile_navigation_button':1, 'mobile_active': isActive('/contact')}" to="/contact">测试</router-link>
+        <router-link :class="{'mobile_navigation_button':1, 'mobile_active': isActive('/about')}" to="/about">关于</router-link>
+        <router-link :class="{'mobile_navigation_button':1, 'mobile_active': isActive('/contact')}" to="/contact">联系</router-link>
       </div>
     </div>
     <router-view/>
@@ -73,30 +73,35 @@ onBeforeMount(() => {
 
 <style scoped>
   .all {
+    width: 100vw;
     height: 100vh;
     position: relative;
   }
 
   .mobile_head{
-    width: 100vw;
+    width: 100%;
     height: 40px;
-    background-color: rgba(0, 212, 255, 0.2);
+    background-color: #CCF6FF;
     margin: auto;
     display: flex;
+    position: fixed;
+    /*bottom: 60px;*/
+    top: 0;
+    left: 0;
+    z-index: 1;
   }
   .mobile_head_icon{
+    max-width: 126px;
     background-size: cover;
     margin: 5px;
   }
   .mobile_head_navigation {
-    /*width: 60vw;*/
+    width: 200px;
     height: 100%;
-    float: right;
-    margin-right: 0;
+    /*float: right;*/
+    margin-left: auto;
     box-sizing: border-box;
     display: flex;
-    justify-content: flex-end;
-    flex: 1;
   }
   .mobile_navigation_button {
     color: black;
@@ -111,6 +116,8 @@ onBeforeMount(() => {
     cursor: pointer;
     font-size: 14px;
     transition: all 0.2s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
   .mobile_active {
     color: #007F99;

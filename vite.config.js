@@ -14,21 +14,14 @@ export default defineConfig({
     }),
     Components({
       resolvers: [ElementPlusResolver()],
-    })
+    }),
+    // require('postcss-100vh-fix'),
+    // require('autoprefixer')
   ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
       // 'child_process': 'child_process-browser'
     }
-  },
-  // server: {
-  //   proxy: {
-  //       '/stop-processing': {
-  //         target: 'https://region-31.seetacloud.com:20727/stop-processing',
-  //         changeOrigin: true,
-  //         // rewrite: (path) => path.replace(/^\/api/, '/stop-processing'),
-  //     },
-  //   },
-  // },
+  }
 })

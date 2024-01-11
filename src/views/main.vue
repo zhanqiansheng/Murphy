@@ -3,10 +3,9 @@ import { ref, watch, onMounted, onBeforeMount } from 'vue'
 import Recorder from 'recorder-core'
 import 'recorder-core/src/engine/mp3'
 import 'recorder-core/src/engine/mp3-engine'
-// import Recorder from 'recorder-core/recorder.mp3.min'
 import axios from "axios";
-import { Microphone, ChatLineRound, WarningFilled } from '@element-plus/icons-vue'
 
+import { Microphone, ChatLineRound, WarningFilled, Promotion, MoreFilled } from '@element-plus/icons-vue'
 // ----------------------------------------------------------------------------------- 变量定义
 const talkAllMessage = ref([])      // 所有对话内容的html代码数组
 // const history = ref([]) // 历史记录数组
@@ -20,6 +19,7 @@ let response_box = ref()   // ai最新答复的聊天框
 let talkBody = ref()       // 整体聊天框
 let talkBox      // 聊天框
 let foot_input = ref()       // 输入框
+let talkFoot = ref()       // 底部
 let turnVoice = ref(false)
 let mobile = 'mobile_'   //样式前缀
 
@@ -28,13 +28,18 @@ let controlable = ref(true)   // 用户是否可输入的状态变量
 let socket  // 双向通信通道
 let voiceOpen = ref(false) // 是否开启语音播放
 let foot_voice = ref()
+let foot_voice_copy = ref()
+let recording_block = ref() //录音黑背景
 let recordingBox = ref() // 录音中提示框
 let unRecognizedVoice = ref(false) // 是否未识别到语音
+let recordMode = true // 录音模式，true长按 false点按
+let popoverVisible = ref(false) // 录音模式选择弹窗
 
 // 大模型选择
 const modelValue = ref('1.0')
 const modelOptions = ref([{value: '1.0',label: 'Murphy-1.0'},{value: '2.0',label: 'Murphy-2.0'}])
-let testURL = ref('u271424-8cae-8d1dbec3.neimeng.seetacloud.com:6443')
+let testURL = ref('u271424-9aae-d59ddd6c.neimeng.seetacloud.com:6443')
+// let testURL = ref('u271424-98ae-ff5ded8d.neimeng.seetacloud.com:6443')
 
 // 广告图片数组
 const imgList = ref(['ad1', 'ad2', 'ad3'])
@@ -130,6 +135,7 @@ const computerAdButtonRegister = () => {
 // ---------------------------------------------------- 发送逻辑
 // 发送前状态重置
 const beforeSendMessage = () => {
+  popoverVisible.value=false;
   voiceNum.value = 0
   sentenceTotal.value = 0
   controlable.value = false
@@ -138,11 +144,16 @@ const beforeSendMessage = () => {
   msgQueue.clear()
   sentence.value = ''
 }
+const messageIsEmpty = ref(false)
 // 发送消息
 const sendMessage = async () => {
   // 过滤用户携带的<>括号
   message.value = messageInput.value.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  if (messageInput.value.trim() === '' || controlable.value === false) return
+  if (messageInput.value.trim() === '' || controlable.value === false){
+    messageIsEmpty.value = true
+    setTimeout(()=>{messageIsEmpty.value = false}, 2000)
+    return
+  }
   beforeSendMessage()
   // 将用户输入上传到页面
   let str = '<div class="' + mobile + 'human">'
@@ -200,7 +211,7 @@ const sendMessage = async () => {
 const connect = () => {
   // 建立双向通信npm
   socket = new WebSocket('wss://' + testURL.value + '/ws/v1/chat/completions')
-  // socket = new WebSocket('wss://' + testURL.value + '/v1/code/completions')
+  // socket = new WebSocket('wss://' + testURL.value + '/ws/v1/code/completions')
   // 连接建立后调用函数
   socket.addEventListener('open', (event) => {
     console.log('连接开启')
@@ -216,6 +227,7 @@ const connect = () => {
   // 处理服务器返回数据
   socket.addEventListener('message', (event) => {
     let temp = event.data.replace(/</g, '&lt;')
+    // console.log('--' + temp + '--')
     if (voiceOpen.value) makeQueue(temp) // 制作句子队列，等待转语音
     // 设置聊天框内的文字内容
     const target = response_box.querySelector('.' + talkBox)
@@ -226,7 +238,6 @@ const connect = () => {
       sentence.value = ''
       ai_response_content.value = ''
       controlable.value = true
-      if (isMobile.value) document.querySelector('.mobile_foot_voice').style.width = '80vw'
     }
     // 传输文字内容
     else if( isCode === false ) {
@@ -238,7 +249,7 @@ const connect = () => {
             }
         } else if(event.data ===' '){
             ai_response_content.value = '&nbsp;'
-        } else if (event.data === '```') {
+        } else if (event.data.substring(0, 3) === '```' || event.data.substring(1, 4) === '```') {
             isCode = true
             ai_response_content.value = '<pre style="display: inline-block;padding: 10px;background-color: black;color: white">########################################################&nbsp;&nbsp;</pre>'
         } else {
@@ -248,7 +259,7 @@ const connect = () => {
     }
     // 传输代码内容
     else if ( isCode === true ) {
-        if (event.data === '```') {
+        if (event.data.substring(event.data.length - 3, event.data.length) === '```') {
             isCode = false
             flag = true
             target.innerHTML = target.innerHTML.slice(0, -6) + '########################################################</pre>'
@@ -357,7 +368,7 @@ const makeQueue = async(temp) => {
       if(times.value > 0) {
         // 只在第一次时在这里播放，此后都是在音频播放判断结束后进行播放
         times.value--
-        await sendMessageToMicrosoft(msgQueue.front(), 0)
+        await sendMessageToMicrosoft(msgQueue.front())
         if(times.value === 0){
           playAudio()
         }
@@ -373,19 +384,12 @@ let loopendId // 语音播放条数是否匹配
 let audio
 // 播放语音
 const playAudio = () => {
-  // if(audio) audio.pause()
   audio = voiceQueue.front()
-  // audio.play()
   audio.muted = true;
   audio.play();
   audio.muted = false;
-  // document.querySelector('.testText').innerHTML += '音频播放开始<br>'
   voiceNum.value++
   console.log('当前语音是第' + voiceNum.value + '条, sentenceTotal的值为' + sentenceTotal.value)
-  // if(voiceNum.value > sentenceTotal.value) {
-  //   audio.pause()
-  //   return
-  // }
   let flag = 0
 
   // 添加timeupdate事件监听器
@@ -400,12 +404,12 @@ const playAudio = () => {
         if(msgQueue.size()===0 && controlable.value === false) {
           loopId = setInterval(()=>{
             if(msgQueue.size()>0){
-              sendMessageToMicrosoft(msgQueue.front(), 1)
+              sendMessageToMicrosoft(msgQueue.front())
               clearInterval(loopId)
             }
           }, 1000) // 每1秒执行一次判断
         } else if(msgQueue.size()>0){
-          sendMessageToMicrosoft(msgQueue.front(), 1)
+          sendMessageToMicrosoft(msgQueue.front())
         }
       }
     }
@@ -433,8 +437,7 @@ const playAudio = () => {
 }
 
 // 向微软发送请求语音合成api请求，将
-const sendMessageToMicrosoft = async(msg, num) => {
-    // if (num===1)
+const sendMessageToMicrosoft = async(msg) => {
     msgQueue.outqueue()
     console.log('发送语音请求中，内容：' + msg)
     const subscriptionKey = '854b68902a2d42f39acb0b8fb789342d';
@@ -468,15 +471,12 @@ const sendMessageToMicrosoft = async(msg, num) => {
         // 将获取到的语音压入队列
         voiceQueue.inqueue(audio)
         console.log('---请求音频完成, 请求内容：---\n' +  msg)
-        // document.querySelector('.testText').innerHTML += '---请求音频完成, 请求内容：---<br>' + msg + '<br>'
-        // msgQueue.outqueue()
       } else {
         console.error('api访问错误:', synthesisResponse.body);
       }
     } else {
       console.log('token访问失败!访问次数过于频繁，请稍后重试')
       ElMessage.error('语音访问过于频繁，请稍后重试')
-      // document.querySelector('.testText').innerHTML += '语音访问过于频繁，请稍后重试'
     }
 }
 // 包含以下标点符号的字符串
@@ -519,6 +519,7 @@ let timeCounter = 0 // 记录录音时长
 // 语音与文字模式切换
 const turnVoiceOrText = () => {
   turnVoice.value = !turnVoice.value
+  popoverVisible.value = false
   // 第一次时请求录音权限
   if(turnVoice.value && isFirstTimeOpenWeb){
     giveRecordPermission()
@@ -526,13 +527,6 @@ const turnVoiceOrText = () => {
   }
   adjustRecordHintBox()
   adjustHeight(1)
-  // if (isMobile.value) {
-  //   if (!controlable.value) {
-  //     foot_voice.value.style.width = '70vw'
-  //   }else{
-  //     foot_voice.value.style.width = '80vw'
-  //   }
-  // }
 }
 // 开启录音权限
 const giveRecordPermission = () => {
@@ -549,8 +543,10 @@ const giveRecordPermission = () => {
     ElMessage.error('未检测到麦克风设备/用户未授权')
   })
 }
+let recordingHintId
 // 开始录音
 const recordStart = () => {
+  popoverVisible.value = false
   if(!rec){
     giveRecordPermission()
     return
@@ -562,13 +558,22 @@ const recordStart = () => {
     console.log('开始录音...')
     timeCounter = Date.now()
     foot_voice.value.innerHTML = '录制中...'
+    foot_voice_copy.value.innerHTML = '录制中...'
     adjustRecordHintBox()
     // 录音开始时打断AI的语音播报
     if (audio) audio.pause()
     voiceQueue.clear()
     msgQueue.clear()
-    recordingBox.value.style.bottom = talkBody.value.clientHeight/ 2 - recordingBox.value.style.height / 2+ 'px'
-    recordingBox.value.style.left = talkBody.value.clientWidth/ 2 - recordingBox.value.clientWidth / 2 + 'px'
+    const hint = document.querySelector('.mobile_recording div')
+    let i = 0
+    recordingHintId = setInterval(()=>{
+      i === 3 ? i = 1 : i++
+      switch (i){
+        case 1: hint.innerHTML = '录制中.';break;
+        case 2: hint.innerHTML = '录制中..';break;
+        case 3: hint.innerHTML = '录制中...';break;
+      }
+    },500)
   }else{
     ElMessage.error('未检测到麦克风设备/用户未授权')
   }
@@ -581,8 +586,10 @@ const recordStop = () => {
   rec.stop(async (blob) => {
     recBlob=blob
     recording.value = false
+    clearTimeout(recordingHintId)
     if (Date.now() - timeCounter < 1000) { // 提示录音时间过短
-      foot_voice.value.innerHTML = '单击开启录制'
+      foot_voice.value.innerHTML = '按住 说话'
+      foot_voice_copy.value.innerHTML = '单击开始录制'
       ElMessage.error('录音时间过短!')
       return
     }
@@ -596,7 +603,8 @@ const recordStop = () => {
         + '</div>'
     talkAllMessage.value.push(str)
     setTimeout(()=>{scrollToBottom()}, 10)
-    foot_voice.value.innerHTML = '单击开启录制'
+    foot_voice.value.innerHTML = '按住 说话'
+    foot_voice_copy.value.innerHTML = '单击开始录制'
     const audioFile = new File([recBlob], 'recorded.wav', { type: 'audio/wav' });
     // 获取文件输入元素
     const fileInput = document.querySelector('input[name="' + mobile + 'file"]');
@@ -643,13 +651,31 @@ const recordStop = () => {
 }
 // 注册按钮事件，开始/结束录音
 const recordButtonRegister = () => {
-  foot_voice.value.addEventListener('click', () => {
-    if (recording.value === false) {
-      recordStart()
-    } else if (recording.value) {
-      recordStop()
+  // 长按模式
+  let touchTimeout;
+  foot_voice.value.addEventListener('touchstart', () => {
+    touchTimeout = setTimeout(() => {
+      if (recording.value === false) {
+        recordStart();
+      }
+    }, 50);
+  });
+  foot_voice.value.addEventListener('touchend', () => {
+    clearTimeout(touchTimeout); // 清除长按的计时器
+    if (recording.value) {
+      recordStop();
     }
-  })
+  });
+  // 点按模式
+  if (isMobile.value){
+    foot_voice_copy.value.addEventListener('click', () => {
+      if (recording.value === false) {
+        recordStart()
+      } else if (recording.value) {
+        recordStop()
+      }
+    })
+  }
 }
 // ---------------------------------------------------- 输入框逻辑
 // 监听输入内容变化
@@ -666,16 +692,16 @@ const adjustHeight = (num) => {
     }, 0)
   } else {
     switch ( foot_input.value.scrollHeight ) {
-      case 35: rowsNum.value = 1;break;
-      case 60: rowsNum.value = 2;break;
-      case 85: rowsNum.value = 3;break;
+      case 35: rowsNum.value = 1; break;
+      case 60: rowsNum.value = 2; break;
+      case 85: rowsNum.value = 3; break;
       case 110: rowsNum.value = 4;break;
       case 135: rowsNum.value = 5;break;
 
-      case 38: rowsNum.value = 1;break;
-      case 50: rowsNum.value = 2;break;
-      case 75: rowsNum.value = 3;break;
-      case 100: rowsNum.value = 4;break;
+      case 38: rowsNum.value = 1; talkFoot.value.style.height = '60px' ;break;
+      case 50: rowsNum.value = 2; talkFoot.value.style.height = '66px' ;break;
+      case 75: rowsNum.value = 3; talkFoot.value.style.height = '91px';break;
+      case 100: rowsNum.value = 4;talkFoot.value.style.height = '116px';break;
 
       default: rowsNum.value = 6;break;
     }
@@ -702,8 +728,8 @@ const adjustHeight = (num) => {
 const adjustRecordHintBox = () => {
   if (recordingBox.value) {
     setTimeout(()=>{
-      recordingBox.value.style.bottom = talkBody.value.clientHeight/ 2 - recordingBox.value.style.height / 2+ 'px'
-      recordingBox.value.style.left = talkBody.value.clientWidth/ 2 - recordingBox.value.clientWidth / 2 + 'px'
+      recordingBox.value.style.bottom = (window.visualViewport.height - 130) / 2 - 30  + 'px'
+      recordingBox.value.style.left = recording_block.value.clientWidth/ 2 - recordingBox.value.clientWidth / 2 + 'px'
     }, 0)
   }
 }
@@ -728,15 +754,18 @@ document.addEventListener('keydown', function(event) {
 const isMobile = ref(false) // 通过屏幕比例判断样式启用类型为电脑/手机
 // 计算屏幕的宽高比
 const checkScreen = () => {
-  const temp = window.innerWidth / window.innerHeight
-  isMobile.value = ( temp <= 1 ) && ( window.innerWidth < 1000 )
+  // const temp = window.innerWidth / window.innerHeight
+  // isMobile.value = ( temp <= 1 ) && ( window.innerWidth < 1000 )
+  isMobile.value = window.innerWidth < 1000
 }
 // 监听窗口大小变化，设置界面样式
 window.addEventListener('resize', () => {
+  // document.activeElement.scrollIntoViewIfNeeded();
   checkScreen()
   talkBody.value = document.querySelector('.' + mobile + 'talk_body')
 });
-
+// window.addEventListener('scroll', () => {
+// })
 // 清除历史
 const clearHistory = () => {
   ElMessageBox.confirm('是否清空会话历史?当前窗口的数据记录将会丢失!', '警告', {
@@ -756,15 +785,12 @@ const clearHistory = () => {
 
 // 鼠标滚轮滑动事件
 const mousewheel = (event) => {
-  // 向上滚动，取消自动滑动
+    // 向上滚动，取消自动滑动
     if (event.deltaY < 0) {
       isBottom.value = false
     }
-    if (talkBody.value.scrollHeight - talkBody.value.scrollTop <= talkBody.value.clientHeight + 5) {
-      isBottom.value = true
-    } else {
-      isBottom.value = false
-    }
+    // 设置若上滑超过5 则可以滚动到底部
+    isBottom.value = talkBody.value.scrollHeight - talkBody.value.scrollTop <= talkBody.value.clientHeight + 5;
     // 同时按下ctrl键，页面大小变化
     if (event.ctrlKey){
       adChange()
@@ -774,19 +800,35 @@ const mousewheel = (event) => {
 onBeforeMount(() => {
   checkScreen()
 })
+// 禁用双指缩放
+document.documentElement.addEventListener('touchstart', function (event) {
+  if (event.touches.length > 1) {
+    event.preventDefault();
+  }
+}, false);
+// 禁用手指双击缩放
+let lastTouchEnd = 0;
+document.documentElement.addEventListener('touchend', function (event) {
+  let now = Date.now();
+  if (now - lastTouchEnd <= 300) {
+    event.preventDefault();
+  }
+  lastTouchEnd = now;
+})
 onMounted( () => {
   // 如果有缓存链接
-  if(localStorage.getItem('testURL')){
-    testURL.value = JSON.parse(localStorage.getItem('testURL'))
-    connect()
-  } else {
-    connect()
-  }
+  // if(localStorage.getItem('testURL')){
+  //   testURL.value = JSON.parse(localStorage.getItem('testURL'))
+  //   connect()
+  // }
+  // let document.querySelector('.mobile_talk_body').style.height
+  connect()
   let str
   if (!isMobile.value){
     mobile = ''
     talkBox = 'talk_box'
     talkBody.value = document.querySelector('.talk_body')
+    talkFoot.value = document.querySelector('.talk_foot')
     foot_input.value = document.querySelector('.foot_input')
     foot_voice.value = document.querySelector('.foot_voice')
     recordingBox.value = document.querySelector('.recording')
@@ -801,8 +843,11 @@ onMounted( () => {
     mobile = 'mobile_'
     talkBox = 'mobile_talk_box'
     talkBody.value = document.querySelector('.mobile_talk_body')
+    talkFoot.value = document.querySelector('.mobile_talk_foot')
     foot_input.value = document.querySelector('.mobile_foot_input')
-    foot_voice.value = document.querySelector('.mobile_foot_voice')
+    foot_voice.value = document.getElementById('mobile_foot_voice')
+    foot_voice_copy.value = document.getElementById('mobile_foot_voice_copy')
+    recording_block.value = document.querySelector('.recording_block')
     recordingBox.value = document.querySelector('.mobile_recording')
     str = '<div class="mobile_machine">' +
           '  <div>' +
@@ -819,12 +864,12 @@ onMounted( () => {
 </script>
 
 <template>
+  <!--电脑端界面-->
   <div class="mainbody" v-if="!isMobile">
-<!--电脑端界面-->
     <div class="mainbody_talk">
       <div class="talk_head">
-        <div class="voiceButton" @click="openVoice()" v-if="!voiceOpen"/>
-        <div class="voiceButton" style="background-image: url('/src/assets/openvoice.png');border: 2px solid greenyellow;" @click="openVoice()" v-if="voiceOpen"/>
+        <div class="voiceButton voiceButton_close" @click="openVoice()" v-if="!voiceOpen"/>
+        <div class="voiceButton voiceButton_open"  @click="openVoice()" v-if="voiceOpen"/>
         <el-select v-model="modelValue" placeholder="请选择">
           <el-option
               v-for="item in modelOptions"
@@ -839,11 +884,11 @@ onMounted( () => {
         <button style="width: auto" @click="connect()">点击连接</button>
       </div>
       <div class="talk_body" @scroll="mousewheel">
+        <div v-if="!isBottom" class="to_bottom_button" @click="clickToBottom">↓</div>
         <form id="uploadForm" enctype="multipart/form-data" style="display: none">
           <input type="file" name="file" accept="audio/*">
           <button type="submit">上传并转录</button>
         </form>
-        <div v-if="!isBottom" class="to_bottom_button" @click="clickToBottom">↓</div>
         <div v-show="recording" class="recording">
           <el-icon style="padding: 10px 20px 0;font-size: 60px;margin-left: auto; color: rgba(0, 0, 0, 0.6);"><Microphone /></el-icon>
           <div style="font-size: 14px;color: black;text-align: center">录制中</div>
@@ -875,12 +920,10 @@ onMounted( () => {
 
   <!--手机端界面-->
   <div class="mobilebody" v-if="isMobile">
-    <div class="mobilebody_ad">
-    </div>
+    <div class="mobilebody_ad"></div>
+    <div class="recording_block" v-show="recording"/>
     <div class="mobile_mainbody_talk">
       <div class="mobile_talk_head">
-<!--        <div class="mobile_voiceButton" @click="openVoice()" v-if="!voiceOpen"/>-->
-<!--        <div class="mobile_voiceButton" style="background-image: url('/src/assets/openvoice.png');border: 2px solid greenyellow;" @click="openVoice()" v-if="voiceOpen"/>-->
         <div style="margin: auto;">智能Murphy</div>
       </div>
       <div class="mobile_talk_body" @scroll="mousewheel">
@@ -888,23 +931,53 @@ onMounted( () => {
           <input type="file" name="mobile_file" accept="audio/*">
           <button type="submit">上传并转录</button>
         </form>
-        <div v-if="!isBottom" class="mobile_to_bottom_button" @click="clickToBottom">↓</div>
         <div v-show="recording" class="mobile_recording">
-          <el-icon style="padding: 10px 20px 0;font-size: 60px;margin-left: auto; color: rgba(0, 0, 0, 0.6);"><Microphone /></el-icon>
-          <div style="font-size: 14px;color: black;text-align: center">录制中</div>
+          <el-icon style="padding: 10px 20px 0;font-size: 60px;margin-left: auto; color: white;"><Microphone /></el-icon>
+          <div style="font-size: 14px;color: white;text-align: center">录制中...</div>
         </div>
         <div v-for="item in talkAllMessage" :key="item" v-html="item"/>
       </div>
       <div class="mobile_talk_foot">
+        <div v-if="!isBottom" class="mobile_to_bottom_button" @click="clickToBottom">↓</div>
         <el-icon class="mobile_button_turn" @click="turnVoiceOrText()" v-if="!turnVoice"><Microphone /></el-icon>
         <el-icon class="mobile_button_turn" @click="turnVoiceOrText()" v-if="turnVoice"><ChatLineRound /></el-icon>
         <textarea v-model="messageInput" class="mobile_foot_input" v-show="!turnVoice"/>
-        <div class="mobile_foot_voice" v-show="turnVoice">单击开启录制</div>
-        <button class="button_send" @click="sendMessage()" v-if="controlable" v-show="!turnVoice">发送</button>
-        <button class="button_stop" @click="stopConnection()" v-else>停止</button>
+        <div class="mobile_foot_voice" v-show="recordMode  && turnVoice" id="mobile_foot_voice">按住 说话</div>
+        <div class="mobile_foot_voice" v-show="!recordMode && turnVoice" id="mobile_foot_voice_copy">单击开始录制</div>
+
+        <el-popover :visible="messageIsEmpty" placement="top-start" :width="150" content="请勿发送空内容!" popper-style="box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);height: 30px;line-height: 30px;font-size: 15px">
+          <template #reference>
+            <el-button style="opacity: 0;height: 1px;position: absolute;right: 8px;" disabled/>
+          </template>
+        </el-popover>
+        <el-icon class="mobile_button_turn" @click="sendMessage()" v-if="controlable" v-show="!turnVoice"><Promotion /></el-icon>
+        <div class="mobile_button_turn mobile_button_stop" @click="stopConnection()" v-else>■</div>
+
+        <el-popover placement="top-start" :width="150" popper-style="margin-bottom: 8px;box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);" :visible="popoverVisible && controlable && turnVoice">
+          <el-button class="mobile_mode_choice" @click="popoverVisible=false;recordMode = true;foot_voice.innerHTML = '按住 说话';foot_voice.style.display = 'block';foot_voice_copy.style.display = 'none'">长按录音模式</el-button><br>
+          <el-button class="mobile_mode_choice" @click="popoverVisible=false;recordMode = false;foot_voice_copy.innerHTML = '单击开始录制';foot_voice.style.display = 'none';foot_voice_copy.style.display = 'block'">单击录音模式</el-button>
+          <template #reference>
+            <el-icon class="mobile_button_turn" @click="popoverVisible=!popoverVisible;" v-if="turnVoice && controlable"><MoreFilled /></el-icon>
+          </template>
+        </el-popover>
       </div>
     </div>
   </div>
+
+<!--  <div class="mobile_beian" v-if="isMobile">-->
+<!--    <div class="mobile_beian_pic"/>-->
+<!--    <div style="border-left: 2px solid gray;"></div>-->
+<!--    <div>-->
+<!--      <div style="height: 30px">-->
+<!--        <div class="mobile_beian_other">联系我们：1************@supermurphy.com</div>-->
+<!--        <div class="mobile_beian_other">电话：1****************</div>-->
+<!--      </div>-->
+<!--      <div style="display: flex;height: 20px">-->
+<!--        <div style="margin-top: 0"><a href="https://beian.miit.gov.cn/" class="mobile_icp">粤ICP备2023152770号</a></div>-->
+<!--        <div class="mobile_gwab">&nbsp;/&nbsp;粤公网安备11***********号</div>-->
+<!--      </div>-->
+<!--    </div>-->
+<!--  </div>-->
 
 <!--  <div class="beian">-->
 <!--    <div style="margin-top: 0"><a href="https://beian.miit.gov.cn/" class="icp">粤ICP备2023152770号</a></div>-->
@@ -913,32 +986,77 @@ onMounted( () => {
 </template>
 
 <style>
-
+.mobile_beian{
+  width: 100%;
+  height: 50px;
+  background-color: #EFF4F9;
+  position: absolute;
+  bottom: -60px;
+  display: flex;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  justify-content: space-around;
+}
+.mobile_beian_pic{
+  width: 50px;
+  height: 50px;
+  background-image: url('../assets/logo3.png');
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+.mobile_beian_other{
+  color: #6A7176;
+  font-size: 13px;
+  line-height: 17px;
+  margin: auto;
+}
+.mobile_icp{
+  font-size: 13px;
+  color: #999AAA;
+  cursor: pointer;
+  text-decoration: none;
+}
+.mobile_gwab {
+  font-size: 12px;
+  color: #6A7176;
+  margin-top: 4px;
+}
 /* 手机部分样式 */
 .mobilebody{
   width: 100vw;
-  position: absolute;
+  position: fixed;
   top: 40px;
   bottom: 0;
+  box-sizing: border-box;
+}
+.mobilebody::-webkit-scrollbar {
+  width: 0;
 }
 .mobile_mainbody_talk {
   width: 100vw;
   border: 2px solid rgba(15, 178, 145, 0.5);
   border-radius: 5px;
-  /*margin: 2px;*/
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   position: absolute;
-  top: 6rem;
-  bottom: 0;
+  top: 60px;
+  /*position: fixed;*/
+  /*top: 100px;*/
+  /*bottom: 0;*/
 }
 .mobile_talk_head{
-  height: 2rem;
-  line-height: 2rem;
+  height: 30px;
+  line-height: 30px;
   display: flex;
   background-color: rgb(240, 251, 255);
-  position: relative;
+  /*background-color: red;*/
+  /*position: fixed;*/
+  /*top: 102px;*/
+  /*left: 2px;*/
+  /*right: 2px;*/
+  border-radius: 5px;
 }
 .mobile_voiceButton {
   width: 2rem;
@@ -960,10 +1078,18 @@ onMounted( () => {
   box-sizing: border-box;
   background-color: #fff;
   border-top: rgba(15, 178, 145, 0.7) 3px solid;
-  border-bottom: rgba(15, 178, 145, 0.7) 3px solid;
-  flex: 1;
+  /*flex: 1;*/
+  /*height: 100px;*/
   margin-bottom: 0;
   overflow: auto;
+  position: fixed;
+  bottom: 60px;
+  top: 130px;
+  border-left: rgba(15, 178, 145, 0.7) 1px solid;
+  border-right: rgba(15, 178, 145, 0.7) 1px solid;
+  left: 0;
+  transition: all 0.3s;
+  /*left: 0;*/
 }
 
 .mobile_talk_body::-webkit-scrollbar {
@@ -975,6 +1101,15 @@ onMounted( () => {
 }
 .mobile_talk_body::-webkit-scrollbar-track {
   background-color: #fff; /* 设置滚动条背景颜色为纯白色 */
+}
+.recording_block{
+  position: fixed;
+  top: 132px;
+  bottom: 60px;
+  left: 2px;
+  right: 2px;
+  background-color: rgba(0, 0, 0, 0.6);
+  z-index: 1;
 }
 .mobile_machine {
   display: flex;
@@ -1033,44 +1168,54 @@ onMounted( () => {
 }
 .mobile_talk_foot {
   width: 100%;
-  min-height: 3rem;
+  height: 60px;
   display: flex;
   margin-top: 0;
+  box-sizing: border-box;
   background-color: rgb(240, 251, 255);
+  border: rgba(15, 178, 145, 0.7) 2px solid;
+  border-top: rgba(15, 178, 145, 0.7) 3px solid;
+  position: fixed;
+  bottom: 0;
+  left: 0;
 }
-.mobile_talk_foot button {
-  width: 10vw;
-  min-width: 45px;
-  height: 30px;
+.mobile_mode_choice{
+  width: 100%;
   margin: auto;
-  color: black;
-  border: 1px solid black;
-  border-radius: 5px;
-  cursor: pointer;
-  user-select: none;
+  /*border: 1px solid red;*/
+  text-align: center;
 }
-
 .mobile_button_turn {
   border: 2px solid black;
   width: 2rem;
   min-width: 2rem;
   height: 2rem;
-  border-radius: 30px;
-  margin: auto 2px auto 4px;
+  border-radius: 2rem;
+  margin: auto 8px;
+  /* 2px auto 4px;*/
   color: black;
   box-sizing: border-box;
   transition: border 0.1s;
   font-size: 20px;
   cursor: pointer;
+  /* 禁止选中，禁用高亮效果 */
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .mobile_button_turn:hover {
   color: #3498db;
   border: 2px solid #3498db;
   background-color: rgb(226, 245, 255);
 }
+.mobile_button_stop{
+  color: red;
+  border-radius: 0.5rem;
+  text-align: center;
+  line-height: 2rem;
+  border: 2px solid red;
+}
 .mobile_foot_input {
   padding: 0 2px;
-  width: 70vw;
   resize: none;
   margin: auto;
   border-radius: 5px;
@@ -1079,17 +1224,16 @@ onMounted( () => {
   border: 2px solid #dddddd;
   line-height: 25px;
   min-height: 2.4rem;
+  flex: 1;
 }
 .mobile_foot_input:focus {
   outline: none;
   border: 2px solid #3498db;
 }
 .mobile_foot_voice {
-  width: 72vw;
-  margin: auto 0 auto 5px;
+  margin: auto 5px;
   border-radius: 5px;
   font-size: 1rem;
-  /*border: 2px solid #dddddd;*/
   line-height: 2.1rem;
   text-align: center;
   cursor: pointer;
@@ -1099,7 +1243,10 @@ onMounted( () => {
   background-color: #80CCBD;
   border-bottom: 5px solid #66A397;
   -webkit-transition: all 0.05s;
+  flex: 1;
+  /* 禁止选中，禁用高亮效果 */
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .mobile_foot_voice:active {
   transform: translate(0px,3px);
@@ -1108,10 +1255,10 @@ onMounted( () => {
 .mobile_recording {
   width: 100px;
   height: 100px;
-  position: absolute;
-  background-color: rgba(0, 0, 0, 0.4);
+  color: white;
+  position: fixed;
+  background-color: rgba(0, 0, 0, 0.7);
   border-radius: 10px;
-  bottom: 80px;
 }
 .mobile_to_bottom_button {
   width: 40px;
@@ -1126,27 +1273,28 @@ onMounted( () => {
   text-align: center;
   line-height: 40px;
   cursor: pointer;
+  /* 禁止选中，禁用高亮效果 */
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
-
-
-
-
-
-
-
-
-
 .mobilebody_ad{
-  height: 6rem;
-  background-color: red;
+  height: 60px;
   border: 1px solid black;
+  box-sizing: border-box;
   margin: 0 auto;
+  /*position: fixed;*/
+  /*top: 40px;*/
+  /*left: 0;*/
   background-image: url('/src/assets/mobile_ad1.png');
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
 }
+
+
+
+
+
 
 /* 主体部分 */
 .mainbody {
@@ -1160,6 +1308,9 @@ onMounted( () => {
   position: absolute;
   top: 50px;
   bottom: 0;
+}
+.mainbody::-webkit-scrollbar {
+   width: 0;
 }
 
 .mainbody_talk {
@@ -1192,12 +1343,17 @@ onMounted( () => {
   top: 4px;
   left: 9px;
   cursor: pointer;
-  border: 1px solid red;
-  /*box-sizing: border-box;*/
-  background-image: url("/src/assets/novoice.jpg");
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
+}
+.voiceButton_close{
+  background-image: url("/src/assets/novoice.jpg");
+  border: 1px solid red;
+}
+.voiceButton_open{
+  background-image: url("/src/assets/openvoice.png");
+  border: 2px solid greenyellow;
 }
 
 .talk_head .el-select {
@@ -1229,7 +1385,7 @@ onMounted( () => {
   box-sizing: border-box;
   background-color: #fff;
   border-top: rgba(15, 178, 145, 0.7) 3px solid;
-  border-bottom: rgba(15, 178, 145, 0.7) 3px solid;
+  /*border-bottom: rgba(15, 178, 145, 0.7) 1px solid;*/
   flex: 1;
   padding: 10px;
   margin-bottom: 0;
