@@ -1,11 +1,11 @@
 <script setup>
-import { ref, watch, onMounted, onBeforeMount } from 'vue'
+import { ref, watch, onMounted, onBeforeMount, defineComponent } from 'vue'
 import Recorder from 'recorder-core'
 import 'recorder-core/src/engine/mp3'
 import 'recorder-core/src/engine/mp3-engine'
 import axios from "axios";
-
-import { Microphone, ChatLineRound, WarningFilled, Promotion, MoreFilled } from '@element-plus/icons-vue'
+import PCResponseBox from '/src/components/PCResponseBox.vue';
+import { Microphone, ChatLineRound, WarningFilled, Promotion, MoreFilled, CopyDocument } from '@element-plus/icons-vue'
 
 // ----------------------------------------------------------------------------------- 变量定义
 const talkAllMessage = ref([])      // 所有对话内容的html代码
@@ -63,16 +63,10 @@ const sendMessage = async () => {
     }
     beforeSendMessage()
     // 将用户输入上传到页面
-    let str = '<div class="human">'
-            + '  <div class="right talk_box">' + message.value + '</div>'
-            + '  <div><div class="head_pic human_pic"></div></div>'
-            + '</div>'
-    talkAllMessage.value.push(str)
-
+    talkAllMessage.value.push({ message: message.value, kind: 'human' })
     // 用户发送消息后1ms，滑动到底部，发送请求
     setTimeout(() => {
         // 调整行高
-      console.log(talkBody.value.children[talkBody.value.children.length - 1].clientHeight)
         if (talkBody.value.children[talkBody.value.children.length - 1].clientHeight > 80) {
           talkBody.value.children[talkBody.value.children.length - 1].querySelector('.talk_box').classList.add('talk_box_adjust');
         }
@@ -106,12 +100,7 @@ const sendMessage = async () => {
         foot_input.value.style.height = 25 + 'px'
         foot_input_copy.value.style.height = 25 + 'px'
 
-        // 显示AI回复样式框架
-        str = '<div class="machine">' +
-            '  <div><div class="head_pic machine_pic"></div></div>' +
-            '  <div class="talk_box">......</div>' +
-            '</div>'
-        talkAllMessage.value.push(str)
+        talkAllMessage.value.push({ message: '......', kind: 'machine' })
     }, 1)
 
     // AI回复消息，获取最新回答的聊天框
@@ -155,6 +144,8 @@ const connect = () => {
             sentence.value = ''
             ai_response_content.value = ''
             controlable.value = true
+            const copy = response_box.querySelector('.content_copy')
+            copy.style.display = 'block'
         }
         // 传输文字内容
         else if( isCode === false ) {
@@ -514,11 +505,8 @@ const recordStop = () => {
         // 停止AI文字回复
         await stopConnection()
         await stopConnection()
-        let str = '<div class="human">'
-                + '  <div class="talk_box right">......</div>'
-                + '  <div><div class="head_pic human_pic"></div></div>'
-                + '</div>'
-        talkAllMessage.value.push(str)
+        // 上传用户的信息框
+        talkAllMessage.value.push({ message: '(识别中)', kind: 'human' })
         setTimeout(()=>{scrollToBottom()}, 10)
         foot_voice.value.innerHTML = '按住 说话'
         foot_voice_copy.value.innerHTML = '单击开始录制'
@@ -707,13 +695,8 @@ onMounted( () => {
     foot_voice_copy.value = document.getElementById('foot_voice_copy')
     recordingBox.value = document.querySelector('.recording')
     recording_block.value = document.querySelector('.pc_recording_block')
-    let str = '<div class="machine">' +
-              '  <div>' +
-              '    <div class="head_pic machine_pic"></div>' +
-              '  </div>' +
-              '  <div class="talk_box" style="line-height: 30px">欢迎来到超思维智能!<br>(测试阶段，效果以正式上线为准)<br>当前为PC端页面</div>' +
-              '</div>'
-    talkAllMessage.value.push(str)
+
+    talkAllMessage.value.push({ message: '欢迎来到超思维智能!<br>(测试阶段，效果以正式上线为准)<br>当前为PC端页面', kind: 'machine' })
     foot_input.value.style.height = '25px'
     foot_input_copy.value.style.height = '25px'
     recordButtonRegister()
@@ -749,7 +732,8 @@ onMounted( () => {
           <el-icon style="padding: 10px 20px 0;font-size: 60px;margin-left: auto; color: rgba(0, 0, 0, 0.6);"><Microphone /></el-icon>
           <div style="font-size: 14px;color: black;text-align: center">录制中</div>
         </div>
-        <div v-for="item in talkAllMessage" :key="item" v-html="item"/>
+<!--        <div v-for="(item, index) in talkAllMessage" :key="index" :is="item.component"/>-->
+        <PCResponseBox v-for="(item, index) in talkAllMessage" :key="index" :message="item.message" :kind="item.kind"></PCResponseBox>
       </div>
       <div class="talk_foot">
         <el-icon class="button_turn" @click="turnVoiceOrText()" v-if="!turnVoice"><Microphone /></el-icon>
@@ -903,77 +887,13 @@ onMounted( () => {
   text-align: center;
   line-height: 40px;
   cursor: pointer;
+  z-index: 1;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .to_bottom_button:hover {
   background-color: #ddd;
-}
-
-.head_pic {
-  width: 60px;
-  height: 60px;
-  border-radius: 30px;
-  border: solid 1px gray;
-  margin: 5px;
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
-}
-
-.machine_pic {
-  background-image: url('../assets/logo.png');
-  background-position: center bottom 5px;
-}
-
-.human_pic {
-  background-image: url('../assets/user.jpg');
-}
-
-/*对话框内容*/
-.talk_box {
-  min-width: 20px;
-  height: auto;
-  border-radius: 5px;
-  border: 1px solid black;
-  padding: 7px 10px 7px 10px;
-  /*box-shadow: 5px 5px 13px 0 rgba(0, 0, 0, 0.3);*/
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #ccc #fff; /* 设置滚动条颜色和背景颜色 */
-  font-size: 15px;
-  line-height: 45px;
-  margin: 5px;
-}
-.talk_box_adjust{
-  line-height: 30px;
-}
-.talk_box::-webkit-scrollbar {
-  height: 10px; /* 设置横向滚动条的高度 */
-}
-
-.talk_box::-webkit-scrollbar-thumb {
-  background-color: #ccc; /* 设置滚动条的颜色为浅灰色 */
-  border-radius: 5px;
-}
-
-.talk_box::-webkit-scrollbar-track {
-  background-color: #fff; /* 设置滚动条背景颜色为纯白色 */
-  border-radius: 5px;
-}
-
-.machine {
-  display: flex;
-  margin: 0 75px 0 5px;
-}
-
-.human {
-  display: flex;
-  margin: 0 5px 0 75px;
-  height: auto;
-}
-
-.right {
-  margin-left: auto;
 }
 
 .talk_foot {

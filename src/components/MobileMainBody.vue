@@ -64,11 +64,7 @@ const sendMessage = async () => {
   }
   beforeSendMessage()
   // 将用户输入上传到页面
-  let str = '<div class="mobile_human">'
-          + '  <div class="mobile_right mobile_talk_box">' + message.value + '</div>'
-          + '  <div><div class="mobile_head_pic mobile_human_pic"></div></div>'
-          + '</div>'
-  talkAllMessage.value.push(str)
+  talkAllMessage.value.push({ message: message.value, kind: 'human' })
   // 用户发送消息后1ms，滑动到底部，发送请求
   setTimeout(() => {
     scrollToBottom()
@@ -103,13 +99,7 @@ const sendMessage = async () => {
   }, 1)
 
   // AI回复样式框架
-  str = '<div class="mobile_machine">' +
-        '  <div>' +
-        '    <div class="mobile_head_pic mobile_machine_pic"></div>' +
-        '  </div>' +
-        '  <div class="mobile_talk_box">......</div>' +
-        '</div>'
-  talkAllMessage.value.push(str)
+  talkAllMessage.value.push({ message: '......', kind: 'machine' })
 
   // AI回复消息，获取最新回答的聊天框
   setTimeout(() => {
@@ -508,11 +498,7 @@ const recordStop = () => {
     // 停止AI文字回复
     await stopConnection()
     await stopConnection()
-    let str = '<div class="mobile_human">'
-            + '  <div class="mobile_talk_box mobile_right">......</div>'
-            + '  <div><div class="mobile_head_pic mobile_human_pic"></div></div>'
-            + '</div>'
-    talkAllMessage.value.push(str)
+    talkAllMessage.value.push({ message: '......', kind: 'human' })
     setTimeout(()=>{scrollToBottom()}, 10)
     foot_voice.value.innerHTML = '按住 说话'
     foot_voice_copy.value.innerHTML = '单击开始录制'
@@ -704,13 +690,15 @@ onMounted( () => {
   recordingBox.value = document.querySelector('.mobile_recording')
   foot_voice.value = document.getElementById('mobile_foot_voice')
   foot_voice_copy.value = document.getElementById('mobile_foot_voice_copy')
-  let str = '<div class="mobile_machine">' +
-            '  <div>' +
-            '    <div class="mobile_head_pic mobile_machine_pic"></div>' +
-            '  </div>' +
-            '  <div class="mobile_talk_box">欢迎来到超思维智能!<br>(测试阶段，效果以正式上线为准)<br>当前为手机端界面</div>' +
-            '</div>'
-  talkAllMessage.value.push(str)
+  // let str = '<div class="mobile_machine">' +
+  //           '  <div>' +
+  //           '    <div class="mobile_head_pic mobile_machine_pic"></div>' +
+  //           '  </div>' +
+  //           '  <div class="mobile_talk_box">欢迎来到超思维智能!<br>(测试阶段，效果以正式上线为准)<br>当前为手机端界面</div>' +
+  //           '</div>'
+  // talkAllMessage.value.push(str)
+
+  talkAllMessage.value.push({ message: '欢迎来到超思维智能!<br>(测试阶段，效果以正式上线为准)<br>当前为PC端页面', kind: 'machine' })
   foot_input.value.style.height = '25px'
   foot_input_copy.value.style.height = '25px'
   recordButtonRegister()
@@ -736,7 +724,8 @@ onMounted( () => {
           <el-icon style="padding: 10px 20px 0;font-size: 60px;margin-left: auto; color: white;"><Microphone /></el-icon>
           <div style="font-size: 14px;color: white;text-align: center">录制中...</div>
         </div>
-        <div v-for="item in talkAllMessage" :key="item" v-html="item"/>
+<!--        <div v-for="item in talkAllMessage" :key="item" v-html="item"/>-->
+        <MobileResponseBox v-for="(item, index) in talkAllMessage" :key="index" :message="item.message" :kind="item.kind"></MobileResponseBox>
       </div>
       <div class="mobile_talk_foot">
         <div v-if="!isBottom" class="mobile_to_bottom_button" @click="clickToBottom">↓</div>
@@ -896,61 +885,61 @@ onMounted( () => {
   background-color: rgba(0, 0, 0, 0.6);
   z-index: 1;
 }
-.mobile_machine {
-  display: flex;
-  margin: 5px 3rem 10px auto;
-}
-.mobile_human {
-  display: flex;
-  margin: 0 auto auto 3rem;
-}
-.mobile_head_pic {
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 0.4rem;
-  border: solid 1px gray;
-  margin: 3px;
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
-}
-.mobile_machine_pic {
-  background-image: url('/src/assets/logo.png');
-  background-position: center bottom 2px;
-}
-.mobile_human_pic {
-  background-image: url('/src/assets/user.jpg');
-}
+/*.mobile_machine {*/
+/*  display: flex;*/
+/*  margin: 5px 3rem 10px auto;*/
+/*}*/
+/*.mobile_human {*/
+/*  display: flex;*/
+/*  margin: 0 auto auto 3rem;*/
+/*}*/
+/*.mobile_head_pic {*/
+/*  width: 2.4rem;*/
+/*  height: 2.4rem;*/
+/*  border-radius: 0.4rem;*/
+/*  border: solid 1px gray;*/
+/*  margin: 3px;*/
+/*  background-position: center;*/
+/*  background-size: cover;*/
+/*  background-repeat: no-repeat;*/
+/*}*/
+/*.mobile_machine_pic {*/
+/*  background-image: url('/src/assets/logo.png');*/
+/*  background-position: center bottom 2px;*/
+/*}*/
+/*.mobile_human_pic {*/
+/*  background-image: url('/src/assets/user.jpg');*/
+/*}*/
 
-/*手机端对话框内容*/
-.mobile_talk_box {
-  min-width: 20px;
-  height: auto;
-  border-radius: 5px;
-  border: 1px solid black;
-  margin: 3px auto auto 2px;
-  padding: 8px 6px;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  font-size: 1rem;
-  line-height: 1.4rem;
-}
-.mobile_talk_box::-webkit-scrollbar {
-  height: 5px; /* 设置横向滚动条的高度 */
-}
-.mobile_talk_box::-webkit-scrollbar-thumb {
-  background-color: #ccc; /* 设置滚动条的颜色为浅灰色 */
-  border-radius: 5px;
-}
-.mobile_talk_box::-webkit-scrollbar-track {
-  background-color: #fff; /* 设置滚动条背景颜色为纯白色 */
-  border-radius: 5px;
-}
-.mobile_right {
-  margin: 3px 2px auto auto;
-  padding: 8px 8px;
-  min-width: 10px;
-}
+/*!*手机端对话框内容*!*/
+/*.mobile_talk_box {*/
+/*  min-width: 20px;*/
+/*  height: auto;*/
+/*  border-radius: 5px;*/
+/*  border: 1px solid black;*/
+/*  margin: 3px auto auto 2px;*/
+/*  padding: 8px 6px;*/
+/*  overflow-x: auto;*/
+/*  scrollbar-width: thin;*/
+/*  font-size: 1rem;*/
+/*  line-height: 1.4rem;*/
+/*}*/
+/*.mobile_talk_box::-webkit-scrollbar {*/
+/*  height: 5px; !* 设置横向滚动条的高度 *!*/
+/*}*/
+/*.mobile_talk_box::-webkit-scrollbar-thumb {*/
+/*  background-color: #ccc; !* 设置滚动条的颜色为浅灰色 *!*/
+/*  border-radius: 5px;*/
+/*}*/
+/*.mobile_talk_box::-webkit-scrollbar-track {*/
+/*  background-color: #fff; !* 设置滚动条背景颜色为纯白色 *!*/
+/*  border-radius: 5px;*/
+/*}*/
+/*.mobile_right {*/
+/*  margin: 3px 2px auto auto;*/
+/*  padding: 8px 8px;*/
+/*  min-width: 10px;*/
+/*}*/
 .mobile_talk_foot {
   width: 100%;
   height: 60px;
@@ -1081,6 +1070,7 @@ onMounted( () => {
   text-align: center;
   line-height: 40px;
   cursor: pointer;
+  z-index: 1;
   /* 禁止选中，禁用高亮效果 */
   user-select: none;
   -webkit-tap-highlight-color: transparent;
